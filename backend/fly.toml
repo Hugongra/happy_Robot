@@ -1,0 +1,29 @@
+# Fly.io config for the FastAPI backend.
+# HTTPS is automatic (Let's Encrypt) — no extra setup needed.
+#
+# Manual deploy: see docs/deployment.md or the guide in the chat.
+
+app = "acme-carrier-api-hugog"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATABASE_URL = "sqlite+aiosqlite:////app/data/carrier_sales.db"
+
+[mounts]
+  source = "carrier_data"
+  destination = "/app/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

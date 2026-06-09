@@ -1,0 +1,23 @@
+# Production reverse proxy with automatic HTTPS via Let's Encrypt.
+# Replace api.example.com / app.example.com with your real domains and
+# point their A records at this server before bringing the stack up.
+
+api.example.com {
+    reverse_proxy backend:8000
+    encode gzip
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
+}
+
+app.example.com {
+    reverse_proxy frontend:80
+    encode gzip
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
+}

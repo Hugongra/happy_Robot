@@ -1,0 +1,66 @@
+To: c.becker@happyrobot.ai
+CC: <recruiter>
+Subject: Acme Logistics — Inbound Carrier Sales POC ready for your review
+
+Hi Carlos,
+
+Ahead of our meeting I wanted to send over a quick update on where the
+Inbound Carrier Sales proof-of-concept stands. I've staged everything so
+that you can poke at it before we talk, but I'll walk you through the
+key decisions on the call.
+
+What's live:
+
+  • An inbound voice agent on HappyRobot (web-call trigger) that
+    handles the full carrier flow — FMCSA verification, load search,
+    pitch, three-round negotiation with a server-side pricing policy,
+    and a mocked transfer to a sales rep.
+
+  • A containerized FastAPI backend providing:
+      – /api/loads/search — load board with eight seeded sample loads
+      – /api/loads/evaluate-offer — deterministic negotiation logic so
+        the LLM never has to do the math
+      – /api/fmcsa/verify — proxy that normalizes FMCSA's response into
+        a clean eligible / not-eligible decision
+      – /api/webhooks/call-completed — sink for post-call extraction
+        and classification
+      – /api/metrics/* — endpoints powering the dashboard
+
+  • A React dashboard reporting calls by outcome, sentiment mix,
+    negotiation-round distribution, agreed-vs-loadboard rate scatter,
+    and the most recent calls in a sortable table. Built outside the
+    platform per your brief — the goal being to show what an embedded
+    operator view looks like end-to-end.
+
+  • All endpoints behind X-API-Key auth, served over HTTPS in the
+    deployed environment (Let's Encrypt via a Caddy reverse proxy;
+    self-signed locally).
+
+Links:
+
+  • Live dashboard:      <https://app.your-domain.example/dashboard>
+  • Web-call demo:       <https://app.your-domain.example/call>
+  • Code repository:     <https://github.com/<you>/carrier-sales-agent>
+  • HappyRobot workflow: <https://platform.happyrobot.ai/...>
+  • 5-min walkthrough:   <link to Loom>
+
+A few questions I'd love to discuss on the call so I can shape this
+toward your real environment:
+
+  1. What does your floor-rate policy actually look like today?
+     The POC uses a fixed % of loadboard rate per load — I'd want to
+     wire this into your TMS instead.
+
+  2. Where does the carrier list live? FMCSA is great for vetting, but
+     most brokerages also have an internal allowlist (preferred
+     carriers, do-not-load, payment-terms tier). Worth folding that in.
+
+  3. What's the realistic transfer destination — an internal queue,
+     a specific rep, or a routing rule based on lane?
+
+I'll keep the demo environment up through the meeting. Looking forward
+to it.
+
+Best,
+Hugo Graena
+hugo@<your-domain>
