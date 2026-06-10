@@ -6,16 +6,6 @@ them with FMCSA, matches them to a load, negotiates a price (max 3
 rounds), and hands off to a human sales rep on agreement. Plus a custom
 ops dashboard fed by post-call telemetry and HappyRobot platform sync.
 
-**Objective 3 — Deployment:** the entire stack runs in Docker (`backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`). See [Docker & deployment](#docker--deployment-objective-3).
-
-> 📄 **For the customer narrative**, read [`deliverables/acme-logistics-build-description.md`](deliverables/acme-logistics-build-description.md).
-> 📧 **For the email to Carlos Becker**, see [`deliverables/email-to-carlos-becker.txt`](deliverables/email-to-carlos-becker.txt).
-> 🎙️ **For the HappyRobot workflow setup**, see [`docs/workflow-setup.md`](docs/workflow-setup.md).
-> 🚢 **For deploy & Docker details**, see [Docker & deployment (Objective 3)](#docker--deployment-objective-3) and [`docs/deployment.md`](docs/deployment.md).
-> 🎬 **For the 5-min video script**, see [`docs/demo-script.md`](docs/demo-script.md).
-> 🏗️ **For system design rationale**, see [System design](#system-design) below.
-> 📐 **For full architecture (C4, ADRs, production path)**, see [`docs/architecture.md`](docs/architecture.md).
-> 🔒 **For HTTPS + API key setup**, see [`docs/security.md`](docs/security.md).
 ---
 
 ## Live demo (Fly.io)
