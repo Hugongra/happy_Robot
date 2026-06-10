@@ -1,0 +1,15 @@
+#!/bin/sh
+# Remove Cursor Agent co-author trailers before the commit is finalized.
+MSG_FILE="$1"
+[ -f "$MSG_FILE" ] || exit 0
+python - "$MSG_FILE" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, encoding="utf-8", errors="replace") as f:
+    lines = f.readlines()
+clean = [line for line in lines if "Co-authored-by: Cursor" not in line]
+text = "".join(clean).rstrip("\n")
+with open(path, "w", encoding="utf-8", newline="\n") as f:
+    if text:
+        f.write(text + "\n")
+PY
