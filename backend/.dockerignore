@@ -1,0 +1,10 @@
+.env
+.env.*
+__pycache__
+*.py[cod]
+.venv
+venv
+data
+.git
+*.md
+fly.toml

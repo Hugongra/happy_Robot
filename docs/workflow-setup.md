@@ -177,7 +177,7 @@ These run after the call ends.
     "origin": "@extract.origin",
     "destination": "@extract.destination",
     "equipment_type": "@extract.equipment_type",
-    "outcome": "@classify.outcome",
+    "outcome": "@classify.classification",
     "sentiment": "@sentiment_classifier.result",
     "classification_reasoning": "@classify.reasoning",
     "duration_seconds": 0,

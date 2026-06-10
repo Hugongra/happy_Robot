@@ -6,8 +6,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_api_key
-from app.database import get_session, Load
-from app.search_utils import normalize_equipment, normalize_location, sanitize_query_param
+from app.db import Load, get_session
+from app.utils.search import normalize_equipment, normalize_location, sanitize_query_param
 
 router = APIRouter(tags=["loads"], dependencies=[Depends(require_api_key)])
 

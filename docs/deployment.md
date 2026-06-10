@@ -31,6 +31,19 @@ docker compose up --build
 
 > **Note on the web call locally.** Browsers require HTTPS for `getUserMedia` *except* on `localhost` and `127.0.0.1`. So local dev works without HTTPS, but the moment you point the dashboard at a non-loopback address you need TLS.
 
+### Option A2 — Local HTTPS (self-signed)
+
+See [`security.md`](security.md). Quick start:
+
+```bash
+# backend/.env — add https://localhost:8444 to CORS_ORIGINS
+# frontend/.env — VITE_API_BASE_URL=https://localhost:8443
+docker compose --profile https up --build
+```
+
+- API: https://localhost:8443  
+- App: https://localhost:8444  
+
 ---
 
 ## Option B — Fly.io (recommended for the demo)
@@ -149,6 +162,6 @@ cp frontend/.env.example frontend/.env
 docker compose up --build
 ```
 
-The DB is seeded with eight sample loads from `backend/app/seed_loads.json`
+The DB is seeded with eight sample loads from `backend/app/db/seed_loads.json`
 on first boot. To reset, remove the `backend_data` volume:
 `docker compose down -v`.

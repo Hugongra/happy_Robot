@@ -11,34 +11,40 @@ Endpoints:
   GET    /api/metrics/*                — dashboard data
   GET    /healthz                      — liveness check
 
-All endpoints except /healthz and /api/voice/token require X-API-Key.
+All /api/* routes require X-API-Key. Only /healthz and OpenAPI UI are public.
 """
 import json
+import logging
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
+from app.auth import PUBLIC_PATHS, api_key_valid
 from app.settings import settings
-from app.database import init_db, SessionLocal, Load, CallRecord, engine
-from app.normalize import normalize_outcome, normalize_sentiment
-from app.call_record_utils import normalize_call_fields
+from app.db import CallRecord, Load, SessionLocal, engine, init_db
+from app.utils.normalize import normalize_outcome, normalize_sentiment
+from app.utils.call_records import normalize_call_fields
 from app.routers import loads as loads_router
 from app.routers import voice as voice_router
 from app.routers import webhooks as webhooks_router
 from app.routers import metrics as metrics_router
 from app.routers import fmcsa as fmcsa_router
 
+logger = logging.getLogger(__name__)
+_DEFAULT_API_KEY = "dev-api-key-change-me"
+
 
 async def _seed_loads_if_empty() -> None:
-    """Seed loads from app/seed_loads.json if table is empty."""
+    """Seed loads from db/seed_loads.json if table is empty."""
     async with SessionLocal() as session:
         existing = (await session.execute(select(Load).limit(1))).scalar_one_or_none()
         if existing:
             return
-        seed_path = Path(__file__).parent / "seed_loads.json"
+        seed_path = Path(__file__).parent / "db" / "seed_loads.json"
         if not seed_path.exists():
             return
         with seed_path.open() as f:
@@ -106,6 +112,10 @@ async def _migrate_schema() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.api_key == _DEFAULT_API_KEY:
+        logger.warning(
+            "API_KEY is still the default — set a strong random value in backend/.env before deploy."
+        )
     # Ensure ./data directory exists for SQLite
     db_dir = Path("data")
     db_dir.mkdir(exist_ok=True)
@@ -118,7 +128,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Acme Logistics — Carrier Sales API", version="1.0.0", lifespan=lifespan)
 
-# CORS
+
+@app.middleware("http")
+async def enforce_api_key_middleware(request: Request, call_next):
+    """Global guard: every /api/* request must present a valid X-API-Key."""
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    if path in PUBLIC_PATHS or not path.startswith("/api"):
+        return await call_next(request)
+    if not api_key_valid(request.headers.get("X-API-Key")):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or invalid API key (X-API-Key)."},
+        )
+    return await call_next(request)
+
+
+# CORS must wrap auth middleware so 401 responses still carry ACAO headers.
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,

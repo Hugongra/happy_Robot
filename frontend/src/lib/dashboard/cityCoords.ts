@@ -1,4 +1,6 @@
 /** Lat/lon [longitude, latitude] for US freight lanes. */
+import { BRAND } from "../brand";
+
 export const CITY_COORDS: Record<string, [number, number]> = {
   dallas: [-96.797, 32.7767],
   atlanta: [-84.388, 33.749],
@@ -34,12 +36,12 @@ export function cityLabel(label: string): string {
 
 export function outcomeRouteColor(outcome: string): string {
   switch (outcome) {
-    case "load_booked": return "#19c37d";
-    case "price_rejected": return "#ffae42";
-    case "carrier_ineligible": return "#ff6b6b";
-    case "no_interest": return "#8a9ab2";
-    case "transferred": return "#4ea1ff";
-    default: return "#6b7280";
+    case "load_booked": return BRAND.green;
+    case "price_rejected": return BRAND.warn;
+    case "carrier_ineligible": return BRAND.danger;
+    case "no_interest": return BRAND.muted;
+    case "transferred": return BRAND.info;
+    default: return "#9ca3af";
   }
 }
 
@@ -50,6 +52,7 @@ export function outcomeLabel(outcome: string): string {
     case "carrier_ineligible": return "Ineligible";
     case "no_interest": return "No interest";
     case "transferred": return "Transferred";
+    case "platform_run": return "Platform run";
     default: return "Other";
   }
 }

@@ -1,15 +1,16 @@
 """Voice token endpoint.
 
 The browser hits this to get a short-lived LiveKit token for a web call.
-We never expose the HappyRobot API key to the client.
+Requires X-API-Key (same as dashboard). HappyRobot credentials stay server-side.
 """
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth import require_api_key
 from app.settings import settings
 
-router = APIRouter(tags=["voice"])
+router = APIRouter(tags=["voice"], dependencies=[Depends(require_api_key)])
 
 
 class TokenOut(BaseModel):
@@ -21,12 +22,7 @@ class TokenOut(BaseModel):
 
 @router.post("/voice/token", response_model=TokenOut)
 async def create_voice_token() -> TokenOut:
-    """No API key required on this endpoint — it's called from the browser.
-
-    In production, gate this with a session cookie or an Origin allowlist.
-    For the demo we rely on CORS + the fact that the HappyRobot side enforces
-    its own workflow-id allowlist.
-    """
+    """Mint a LiveKit token via HappyRobot. Caller must send X-API-Key."""
     if not settings.happyrobot_api_key or not settings.happyrobot_workflow_id:
         raise HTTPException(500, "HappyRobot credentials not configured on server.")
 

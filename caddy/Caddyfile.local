@@ -1,0 +1,37 @@
+# Local HTTPS with Caddy's internal CA (self-signed).
+#
+# Start:  docker compose --profile https up --build
+# API:    https://localhost:8443
+# App:    https://localhost:8444
+#
+# Browsers will warn until you trust Caddy's root (optional):
+#   caddy trust   # requires caddy CLI installed locally
+#
+# Set in frontend/.env:
+#   VITE_API_BASE_URL=https://localhost:8443
+# Set in backend/.env CORS_ORIGINS to include https://localhost:8444
+
+{
+	# Disable auto HTTP→HTTPS on port 80 for this local profile
+	auto_https disable_redirects
+}
+
+https://localhost:8443 {
+	tls internal
+	reverse_proxy backend:8000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+	}
+}
+
+https://localhost:8444 {
+	tls internal
+	reverse_proxy frontend:80
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+	}
+}

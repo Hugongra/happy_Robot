@@ -1,5 +1,12 @@
+export type TransferStatus = "successful" | "failed" | "pending" | "n/a";
+
+export type SyncSource = "webhook" | "platform";
+
 export type CallRecord = {
   id: number;
+  run_id?: string;
+  sync_source?: SyncSource;
+  platform_status?: string;
   created_at: string;
   mc_number: string;
   carrier_name: string;
@@ -16,6 +23,9 @@ export type CallRecord = {
   sentiment: string;
   duration_seconds: number;
   broker_margin?: number;
+  miles?: number;
+  transfer_status?: TransferStatus;
+  last_carrier_offer?: number;
   transcript?: string;
   classification_reasoning?: string;
   isDemo?: boolean;
@@ -46,10 +56,46 @@ export type MarginPoint = {
   load_id: string;
 };
 
-export type RouteLane = {
-  id: number;
+export type FunnelStep = {
+  key: string;
+  label: string;
+  count: number;
+  pct_of_total: number;
+  drop_label?: string;
+};
+
+export type EquipmentStat = {
+  equipment: string;
+  calls: number;
+  booked: number;
+  booking_rate: number;
+  avg_margin: number;
+  total_margin: number;
+};
+
+export type MissedOpportunity = {
   origin: string;
   destination: string;
-  outcome: string;
-  load_id: string;
+  equipment: string;
+  requests: number;
+  last_requested: string;
+  sample_carrier?: string;
+};
+
+export type KpiTrend = {
+  delta_pct: number;
+  direction: "up" | "down" | "flat";
+  label: string;
+};
+
+export type DashboardAnalytics = {
+  yield_per_mile: number;
+  total_booked_miles: number;
+  ai_roi: number;
+  human_cost_savings: number;
+  extra_margin_captured: number;
+  funnel: FunnelStep[];
+  equipment: EquipmentStat[];
+  missed_opportunities: MissedOpportunity[];
+  trends: Record<string, KpiTrend>;
 };

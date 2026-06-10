@@ -7,6 +7,25 @@
 
 ---
 
+## Executive summary
+
+This proof of concept was built as if it were being deployed for a real
+freight brokerage operating an inbound carrier sales desk. The system gives
+Acme Logistics an AI voice agent that answers inbound carrier calls, verifies
+operating authority, searches available loads, runs a bounded rate
+negotiation, and hands the call to a human rep only when the conversation is
+ready to close.
+
+From an operations standpoint, the value is straightforward:
+
+- Fewer repetitive qualification calls for carrier sales reps
+- Faster response time to inbound carriers asking for freight
+- Consistent pricing discipline through server-enforced floor rates
+- Better call visibility through a dashboard of outcomes, rates, and trends
+
+The build is intentionally designed so the AI handles conversation, while the
+backend owns anything that affects compliance, pricing, or reporting.
+
 ## 1. The problem we're solving
 
 Your inbound carrier desk fields hundreds of calls a day from drivers and
@@ -69,7 +88,7 @@ A single service exposing six paths:
 - `POST /api/webhooks/call-completed` — sink.
 - `GET /api/metrics/*` — dashboard data.
 
-Auth: an `X-API-Key` header on every endpoint except `/healthz` and the token endpoint. Storage: SQLite by default for the POC; the migration path to Postgres is one env var (`DATABASE_URL`).
+Auth: an `X-API-Key` header on every `/api/*` endpoint. Only `/healthz` and the API docs are public. Storage: SQLite by default for the POC; the migration path to Postgres is one env var (`DATABASE_URL`).
 
 ### 3.3 Dashboard (React)
 

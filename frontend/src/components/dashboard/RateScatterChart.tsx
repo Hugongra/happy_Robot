@@ -3,7 +3,7 @@ import {
   Tooltip, CartesianGrid, ReferenceLine,
 } from "recharts";
 import type { CallRecord } from "../../lib/dashboard/types";
-import { tooltipStyle, OUTCOME_COLORS } from "../../lib/dashboard/theme";
+import { tooltipStyle, OUTCOME_COLORS, chartGridStroke, chartAxisColor } from "../../lib/dashboard/theme";
 import { fmtMoney } from "../../lib/dashboard/format";
 import { Card } from "./ui";
 
@@ -37,22 +37,22 @@ export function RateScatterChart({ calls }: { calls: CallRecord[] }) {
   return (
     <Card title="Agreed rate vs loadboard rate">
       {data.length === 0 ? (
-        <div style={{ color: "#8a9ab2", textAlign: "center", padding: "80px 0", fontSize: 13 }}>
+        <div style={{ color: "var(--muted)", textAlign: "center", padding: "80px 0", fontSize: 13 }}>
           No negotiated rates in this window yet.
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={260}>
           <ScatterChart margin={{ top: 8, right: 12, bottom: 8, left: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2c4a" />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
             <XAxis
               type="number" dataKey="loadboard_rate" name="Posted"
-              stroke="#8a9ab2" fontSize={11} tickFormatter={(v) => `$${v}`}
-              label={{ value: "Posted ($)", fill: "#8a9ab2", fontSize: 11, dy: 12 }}
+              stroke={chartAxisColor} fontSize={11} tickFormatter={(v) => `$${v}`}
+              label={{ value: "Posted ($)", fill: chartAxisColor, fontSize: 11, dy: 12 }}
             />
             <YAxis
               type="number" dataKey="agreed_rate" name="Agreed"
-              stroke="#8a9ab2" fontSize={11} tickFormatter={(v) => `$${v}`}
-              label={{ value: "Agreed ($)", fill: "#8a9ab2", fontSize: 11, angle: -90, dx: -8 }}
+              stroke={chartAxisColor} fontSize={11} tickFormatter={(v) => `$${v}`}
+              label={{ value: "Agreed ($)", fill: chartAxisColor, fontSize: 11, angle: -90, dx: -8 }}
             />
             <ZAxis type="number" dataKey="rounds" range={[50, 220]} name="Rounds" />
             <Tooltip
@@ -66,7 +66,7 @@ export function RateScatterChart({ calls }: { calls: CallRecord[] }) {
             />
             <ReferenceLine
               segment={[{ x: 0, y: 0 }, { x: 3000, y: 3000 }]}
-              stroke="#8a9ab2"
+              stroke={chartAxisColor}
               strokeDasharray="4 4"
               strokeOpacity={0.35}
             />
@@ -75,7 +75,7 @@ export function RateScatterChart({ calls }: { calls: CallRecord[] }) {
                 key={outcome}
                 name={outcome}
                 data={points}
-                fill={OUTCOME_COLORS[outcome] ?? "#19c37d"}
+                fill={OUTCOME_COLORS[outcome] ?? "#9ca3af"}
                 fillOpacity={0.85}
               />
             ))}

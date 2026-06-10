@@ -19,12 +19,9 @@ def normalize_outcome(raw: str | bool | None, *, agreed_rate: float = 0, carrier
         text = ""
 
     if text in VALID_OUTCOMES:
-        # "other" is often the default when the classifier didn't resolve
         if text == "other":
             if agreed_rate > 0:
                 return "load_booked"
-            if not carrier_eligible:
-                return "carrier_ineligible"
         return text
 
     # Common aliases from classifiers
@@ -43,11 +40,8 @@ def normalize_outcome(raw: str | bool | None, *, agreed_rate: float = 0, carrier
     if text in aliases:
         return aliases[text]
 
-    # Infer from commercial signals when classifier didn't resolve
     if agreed_rate > 0:
         return "load_booked"
-    if not carrier_eligible:
-        return "carrier_ineligible"
 
     return "other"
 

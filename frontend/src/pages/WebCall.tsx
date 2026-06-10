@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { HappyRobotVoiceClient } from "@happyrobot-ai/sdk/voice";
 import type { VoiceConnection } from "@happyrobot-ai/sdk/voice";
 import { fetchVoiceToken } from "../lib/api";
+import { BRAND } from "../lib/brand";
 
 type CallState = "idle" | "connecting" | "in-call" | "ending";
 
@@ -46,19 +47,25 @@ export function WebCallPage() {
 
   return (
     <div style={{ maxWidth: 640, margin: "40px auto", textAlign: "center" }}>
-      <h1 style={{ fontSize: 28, margin: "0 0 8px" }}>Call our Carrier Desk</h1>
-      <p style={{ color: "#8a9ab2", margin: "0 0 36px" }}>
+      <img
+        src="/acme-logo.png"
+        alt="Acme Logistics"
+        style={{ height: 72, marginBottom: 24 }}
+      />
+      <h1 style={{ fontSize: 28, margin: "0 0 8px", color: BRAND.text }}>Call our Carrier Desk</h1>
+      <p style={{ color: BRAND.muted, margin: "0 0 36px" }}>
         Connect by voice to Acme Logistics' AI carrier rep. Have your MC number ready.
       </p>
 
       <div style={{
         margin: "0 auto 24px",
         width: 220, height: 220, borderRadius: "50%",
-        background: state === "in-call" ? "radial-gradient(circle at 35% 30%, #19c37d 0%, #0b3a26 70%)" :
-                    state === "connecting" ? "radial-gradient(circle at 35% 30%, #ffae42 0%, #4a3208 70%)" :
-                    "radial-gradient(circle at 35% 30%, #1f2c4a 0%, #0b1220 70%)",
+        background: state === "in-call" ? `radial-gradient(circle at 35% 30%, ${BRAND.green} 0%, ${BRAND.greenDark} 70%)` :
+                    state === "connecting" ? `radial-gradient(circle at 35% 30%, ${BRAND.warn} 0%, #92400e 70%)` :
+                    `radial-gradient(circle at 35% 30%, ${BRAND.greenLight} 0%, ${BRAND.bgAlt} 70%)`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: state === "in-call" ? "0 0 60px rgba(25,195,125,0.35)" : "none",
+        border: `3px solid ${state === "in-call" ? BRAND.green : BRAND.border}`,
+        boxShadow: state === "in-call" ? `0 0 40px ${BRAND.green}55` : "var(--shadow)",
         transition: "all 200ms ease",
       }}>
         <div style={{ fontSize: 48 }}>
@@ -66,7 +73,7 @@ export function WebCallPage() {
         </div>
       </div>
 
-      <div style={{ color: "#8a9ab2", marginBottom: 24, height: 20 }}>
+      <div style={{ color: BRAND.muted, marginBottom: 24, height: 20 }}>
         {state === "idle" && "Ready"}
         {state === "connecting" && "Connecting to the agent…"}
         {state === "in-call" && (muted ? "You are muted" : "Live")}
@@ -89,14 +96,14 @@ export function WebCallPage() {
       {error && (
         <div style={{
           marginTop: 24, padding: 12, borderRadius: 8,
-          background: "#3a1a1a", border: "1px solid #ff6b6b", color: "#ffb4b4",
+          background: "#fef2f2", border: `1px solid ${BRAND.danger}`, color: "#991b1b",
           fontSize: 13, textAlign: "left",
         }}>
           <strong>Error:</strong> {error}
         </div>
       )}
 
-      <p style={{ marginTop: 48, color: "#8a9ab2", fontSize: 13 }}>
+      <p style={{ marginTop: 48, color: BRAND.muted, fontSize: 13 }}>
         Tip: allow microphone access when your browser asks.
       </p>
     </div>
@@ -105,9 +112,9 @@ export function WebCallPage() {
 
 const baseBtn: React.CSSProperties = {
   padding: "12px 28px", fontSize: 15, fontWeight: 700, borderRadius: 10,
-  border: "1px solid transparent", color: "#0b1220",
+  border: "1px solid transparent",
 };
-const btnPrimary: React.CSSProperties = { ...baseBtn, background: "#4ea1ff" };
-const btnSecondary: React.CSSProperties = { ...baseBtn, background: "#18233d", color: "#e6ecf5", border: "1px solid #1f2c4a" };
-const btnWarn: React.CSSProperties = { ...baseBtn, background: "#ffae42" };
-const btnDanger: React.CSSProperties = { ...baseBtn, background: "#ff6b6b", color: "#0b1220" };
+const btnPrimary: React.CSSProperties = { ...baseBtn, background: BRAND.green, color: BRAND.white };
+const btnSecondary: React.CSSProperties = { ...baseBtn, background: BRAND.white, color: BRAND.text, border: `1px solid ${BRAND.border}` };
+const btnWarn: React.CSSProperties = { ...baseBtn, background: BRAND.warn, color: BRAND.white };
+const btnDanger: React.CSSProperties = { ...baseBtn, background: BRAND.danger, color: BRAND.white };

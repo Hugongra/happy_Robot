@@ -1,14 +1,22 @@
 """Metrics endpoints powering the dashboard."""
+import asyncio
+import time
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_api_key
-from app.database import get_session, CallRecord
-from app.time_utils import to_utc_iso
+from app.db import CallRecord, Load, engine, get_session
+from app.services.platform_sync import merge_recent_calls, sync_platform_runs_to_db
+from app.utils.time import to_utc_iso
+from app.utils.call_records import resolve_agreed_rate
 
 router = APIRouter(tags=["metrics"], dependencies=[Depends(require_api_key)])
+
+_sync_lock = asyncio.Lock()
+_last_sync_at = 0.0
+_SYNC_MIN_INTERVAL = 20.0
 
 _NEGOTIATED = and_(CallRecord.agreed_rate > 0)
 _BOOKED = CallRecord.outcome == "load_booked"
@@ -18,7 +26,33 @@ def _since(days: int) -> datetime:
     return datetime.utcnow() - timedelta(days=days)
 
 
+def _margin_chart_label(created: str, load_id: str) -> str:
+    if not created:
+        return load_id or ""
+    try:
+        parsed = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        label = parsed.strftime("%b %d %H:%M")
+        return f"{label} · {load_id}" if load_id else label
+    except ValueError:
+        return load_id or created[:10]
+
+
+def _resolved_agreed(r: CallRecord) -> float:
+    reasoning = r.classification_reasoning or ""
+    if not reasoning and isinstance(r.raw_payload, dict):
+        reasoning = str(r.raw_payload.get("classification_reasoning") or "")
+    return resolve_agreed_rate(
+        r.agreed_rate,
+        r.loadboard_rate,
+        r.counter_offers or [],
+        classification_reasoning=reasoning,
+        transcript=r.transcript or "",
+        outcome=r.outcome or "",
+    )
+
+
 def _call_to_dict(r: CallRecord, *, include_detail: bool = False) -> dict:
+    agreed = _resolved_agreed(r)
     base = {
         "id": r.id,
         "created_at": to_utc_iso(r.created_at),
@@ -30,14 +64,14 @@ def _call_to_dict(r: CallRecord, *, include_detail: bool = False) -> dict:
         "destination": r.destination,
         "equipment_type": r.equipment_type,
         "loadboard_rate": r.loadboard_rate,
-        "agreed_rate": r.agreed_rate,
+        "agreed_rate": agreed,
         "num_counter_offers": r.num_counter_offers,
         "counter_offers": r.counter_offers or [],
         "outcome": r.outcome,
         "sentiment": r.sentiment,
         "duration_seconds": r.duration_seconds,
-        "broker_margin": round(r.loadboard_rate - r.agreed_rate, 2)
-        if r.outcome == "load_booked" and r.loadboard_rate > 0 and r.agreed_rate > 0
+        "broker_margin": round(r.loadboard_rate - agreed, 2)
+        if r.outcome == "load_booked" and r.loadboard_rate > 0 and agreed > 0
         else 0,
     }
     if include_detail:
@@ -51,46 +85,23 @@ def _call_to_dict(r: CallRecord, *, include_detail: bool = False) -> dict:
     return base
 
 
-@router.get("/metrics/summary")
-async def summary(days: int = Query(30, ge=1, le=365), session: AsyncSession = Depends(get_session)):
-    since = _since(days)
-    base = CallRecord.created_at >= since
-
-    total = (await session.execute(
-        select(func.count(CallRecord.id)).where(base)
-    )).scalar_one()
-
-    booked = (await session.execute(
-        select(func.count(CallRecord.id)).where(base, _BOOKED)
-    )).scalar_one()
-
-    avg_agreed = (await session.execute(
-        select(func.avg(CallRecord.agreed_rate)).where(base, _NEGOTIATED)
-    )).scalar_one() or 0
-
-    avg_loadboard = (await session.execute(
-        select(func.avg(CallRecord.loadboard_rate))
-        .where(base, _NEGOTIATED, CallRecord.loadboard_rate > 0)
-    )).scalar_one() or 0
-
-    avg_rounds = (await session.execute(
-        select(func.avg(CallRecord.num_counter_offers)).where(base)
-    )).scalar_one() or 0
-
-    avg_duration = (await session.execute(
-        select(func.avg(CallRecord.duration_seconds)).where(base)
-    )).scalar_one() or 0
-
-    ineligible = (await session.execute(
-        select(func.count(CallRecord.id))
-        .where(base, CallRecord.carrier_eligible == False)  # noqa: E712
-    )).scalar_one()
-
-    booked_rows = (await session.execute(
-        select(CallRecord.loadboard_rate, CallRecord.agreed_rate)
-        .where(base, _BOOKED, CallRecord.loadboard_rate > 0, CallRecord.agreed_rate > 0)
-    )).all()
-    total_broker_margin = sum(max(lb - ag, 0) for lb, ag in booked_rows)
+def _summary_from_calls(calls: list[dict], days: int) -> dict:
+    """Aggregate KPIs from the same merged call list as recent-calls."""
+    total = len(calls)
+    booked_calls = [c for c in calls if c.get("outcome") == "load_booked"]
+    booked = len(booked_calls)
+    negotiated = [c for c in calls if (c.get("agreed_rate") or 0) > 0]
+    avg_agreed = (sum(c["agreed_rate"] for c in negotiated) / len(negotiated)) if negotiated else 0
+    with_lb = [c for c in negotiated if (c.get("loadboard_rate") or 0) > 0]
+    avg_loadboard = (sum(c["loadboard_rate"] for c in with_lb) / len(with_lb)) if with_lb else 0
+    avg_rounds = (sum(c.get("num_counter_offers") or 0 for c in calls) / total) if total else 0
+    avg_duration = (sum(c.get("duration_seconds") or 0 for c in calls) / total) if total else 0
+    ineligible = sum(1 for c in calls if c.get("outcome") == "carrier_ineligible")
+    total_broker_margin = sum(
+        c.get("broker_margin")
+        or max((c.get("loadboard_rate") or 0) - (c.get("agreed_rate") or 0), 0)
+        for c in booked_calls
+    )
 
     return {
         "window_days": days,
@@ -105,6 +116,19 @@ async def summary(days: int = Query(30, ge=1, le=365), session: AsyncSession = D
         "fmcsa_rejection_rate": round((ineligible / total) * 100, 1) if total else 0,
         "total_broker_margin": round(total_broker_margin, 2),
     }
+
+
+@router.get("/metrics/summary")
+async def summary(days: int = Query(30, ge=1, le=365), session: AsyncSession = Depends(get_session)):
+    since = _since(days)
+    rows = (await session.execute(
+        select(CallRecord)
+        .where(CallRecord.created_at >= since)
+        .order_by(CallRecord.created_at.desc())
+        .limit(500)
+    )).scalars().all()
+    merged = await merge_recent_calls(rows, _call_to_dict, days=days, limit=500)
+    return _summary_from_calls(merged, days)
 
 
 @router.get("/metrics/by-outcome")
@@ -151,27 +175,32 @@ async def margin_evolution(
     since = _since(days)
     rows = (await session.execute(
         select(CallRecord)
-        .where(
-            CallRecord.created_at >= since,
-            _BOOKED,
-            CallRecord.loadboard_rate > 0,
-            CallRecord.agreed_rate > 0,
-        )
-        .order_by(CallRecord.created_at.asc())
-        .limit(limit)
+        .where(CallRecord.created_at >= since)
+        .order_by(CallRecord.created_at.desc())
+        .limit(limit * 3)
     )).scalars().all()
+    merged = await merge_recent_calls(rows, _call_to_dict, days=days, limit=limit * 3)
+    booked = [
+        c for c in merged
+        if c.get("outcome") == "load_booked"
+        and (c.get("loadboard_rate") or 0) > 0
+        and (c.get("agreed_rate") or 0) > 0
+    ]
+    booked.sort(key=lambda c: c.get("created_at") or "")
 
     cumulative = 0.0
     series = []
-    for r in rows:
-        margin = max(r.loadboard_rate - r.agreed_rate, 0)
+    for c in booked[:limit]:
+        margin = max((c.get("loadboard_rate") or 0) - (c.get("agreed_rate") or 0), 0)
         cumulative += margin
+        created = c.get("created_at") or ""
+        label = _margin_chart_label(created, c.get("load_id") or "")
         series.append({
-            "date": to_utc_iso(r.created_at),
-            "label": r.created_at.strftime("%b %d"),
+            "date": created,
+            "label": label,
             "margin": round(margin, 2),
             "cumulative_margin": round(cumulative, 2),
-            "load_id": r.load_id,
+            "load_id": c.get("load_id") or "",
         })
     return series
 
@@ -189,7 +218,27 @@ async def recent_calls(
         .order_by(CallRecord.created_at.desc())
         .limit(limit)
     )).scalars().all()
-    return [_call_to_dict(r, include_detail=True) for r in rows]
+    return await merge_recent_calls(
+        rows,
+        _call_to_dict,
+        days=days,
+        limit=limit,
+    )
+
+
+@router.post("/metrics/sync-happyrobot")
+async def sync_happyrobot(session: AsyncSession = Depends(get_session)):
+    """Backfill call_records from HappyRobot platform runs (AI Extract / Classify)."""
+    global _last_sync_at
+    now = time.monotonic()
+    if _sync_lock.locked():
+        return {"skipped": True, "reason": "in_progress"}
+    if now - _last_sync_at < _SYNC_MIN_INTERVAL:
+        return {"skipped": True, "reason": "throttled", "retry_after_seconds": int(_SYNC_MIN_INTERVAL - (now - _last_sync_at))}
+
+    async with _sync_lock:
+        _last_sync_at = time.monotonic()
+        return await sync_platform_runs_to_db(session)
 
 
 @router.get("/metrics/calls/{call_id}")

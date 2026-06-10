@@ -9,6 +9,7 @@ import {
 import {
   useMapData, filterRoutes, type MapRoute, type HubNode,
 } from "../../lib/dashboard/routeMapUtils";
+import { BRAND } from "../../lib/brand";
 import { fmtMoney } from "../../lib/dashboard/format";
 import { Card } from "./ui";
 
@@ -62,7 +63,7 @@ export function RouteMap({ calls, selectedId, onSelectRoute }: Props) {
     <Card
       title="Logistics route map"
       action={
-        <span style={{ fontSize: 11, color: "#8a9ab2" }}>
+        <span style={{ fontSize: 11, color: "var(--muted)" }}>
           {visibleStats.lanes} lanes · {visibleStats.booked} booked · {visibleStats.totalMiles.toLocaleString()} mi
         </span>
       }
@@ -73,18 +74,18 @@ export function RouteMap({ calls, selectedId, onSelectRoute }: Props) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 12 }}>
           <div style={{
             position: "relative",
-            background: "radial-gradient(ellipse at 40% 35%, #0f2847 0%, #060b14 55%, #030508 100%)",
+            background: `radial-gradient(ellipse at 40% 35%, ${BRAND.greenLight} 0%, ${BRAND.bgAlt} 55%, ${BRAND.white} 100%)`,
             borderRadius: 12,
             overflow: "hidden",
-            border: "1px solid #1f2c4a",
+            border: `1px solid ${BRAND.border}`,
             minHeight: 440,
           }}>
             {/* subtle grid overlay */}
             <div style={{
-              position: "absolute", inset: 0, opacity: 0.07, pointerEvents: "none",
+              position: "absolute", inset: 0, opacity: 0.12, pointerEvents: "none",
               backgroundImage: `
-                linear-gradient(#4ea1ff 1px, transparent 1px),
-                linear-gradient(90deg, #4ea1ff 1px, transparent 1px)
+                linear-gradient(${BRAND.greenMuted} 1px, transparent 1px),
+                linear-gradient(90deg, ${BRAND.greenMuted} 1px, transparent 1px)
               `,
               backgroundSize: "48px 48px",
             }} />
@@ -102,12 +103,12 @@ export function RouteMap({ calls, selectedId, onSelectRoute }: Props) {
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
-                      fill="#0c1528"
-                      stroke="#243656"
-                      strokeWidth={0.6}
+                      fill={BRAND.greenLight}
+                      stroke={BRAND.greenMuted}
+                      strokeWidth={0.8}
                       style={{
-                        default: { outline: "none", opacity: 0.95 },
-                        hover: { outline: "none", fill: "#111f38", opacity: 1 },
+                        default: { outline: "none", opacity: 1 },
+                        hover: { outline: "none", fill: BRAND.greenMuted, opacity: 1 },
                         pressed: { outline: "none" },
                       }}
                     />
@@ -151,9 +152,9 @@ export function RouteMap({ calls, selectedId, onSelectRoute }: Props) {
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
                   padding: "5px 10px", borderRadius: 999, cursor: "pointer",
-                  border: `1px solid ${off ? "#1f2c4a" : item.color + "66"}`,
+                  border: `1px solid ${off ? BRAND.border : item.color + "66"}`,
                   background: off ? "transparent" : item.color + "18",
-                  color: off ? "#5a6478" : "#e6ecf5",
+                  color: off ? BRAND.muted : BRAND.text,
                   fontSize: 11, fontWeight: 600,
                   opacity: off ? 0.45 : 1,
                   transition: "all 0.15s",
@@ -164,7 +165,7 @@ export function RouteMap({ calls, selectedId, onSelectRoute }: Props) {
                   background: item.color, boxShadow: off ? "none" : `0 0 8px ${item.color}`,
                 }} />
                 {item.label}
-                <span style={{ color: "#8a9ab2", fontWeight: 500 }}>({item.count})</span>
+                <span style={{ color: "var(--muted)", fontWeight: 500 }}>({item.count})</span>
               </button>
             );
           })}
@@ -174,7 +175,7 @@ export function RouteMap({ calls, selectedId, onSelectRoute }: Props) {
               onClick={() => setHiddenOutcomes(new Set())}
               style={{
                 padding: "5px 10px", borderRadius: 999, fontSize: 11,
-                border: "1px solid #1f2c4a", background: "#18233d", color: "#8a9ab2", cursor: "pointer",
+                border: `1px solid ${BRAND.border}`, background: BRAND.bgAlt, color: BRAND.muted, cursor: "pointer",
               }}
             >
               Show all
@@ -204,8 +205,8 @@ function MapDefs() {
         </feMerge>
       </filter>
       <linearGradient id="routeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stopColor="#4ea1ff" stopOpacity={0.9} />
-        <stop offset="100%" stopColor="#19c37d" stopOpacity={0.9} />
+        <stop offset="0%" stopColor={BRAND.greenDark} stopOpacity={0.9} />
+        <stop offset="100%" stopColor={BRAND.green} stopOpacity={0.9} />
       </linearGradient>
     </defs>
   );
@@ -320,22 +321,22 @@ function HubLayer({ hubs, routes }: { hubs: HubNode[]; routes: MapRoute[] }) {
         return (
           <Marker key={hub.city} coordinates={hub.coords}>
             {hasBooked && (
-              <circle r={r + 5} fill="#19c37d" opacity={0.12} filter="url(#hubGlow)">
+              <circle r={r + 5} fill={BRAND.green} opacity={0.12} filter="url(#hubGlow)">
                 <animate attributeName="r" values={`${r + 4};${r + 7};${r + 4}`} dur="2.5s" repeatCount="indefinite" />
                 <animate attributeName="opacity" values="0.18;0.06;0.18" dur="2.5s" repeatCount="indefinite" />
               </circle>
             )}
             <circle
               r={r}
-              fill={hasBooked ? "#19c37d" : "#4ea1ff"}
-              stroke="#0a1020"
+              fill={hasBooked ? BRAND.green : BRAND.greenDark}
+              stroke={BRAND.white}
               strokeWidth={1.5}
               opacity={0.95}
             />
             <text
               textAnchor="middle"
               y={-r - 5}
-              style={{ fontSize: 9, fill: "#c8d4e8", fontWeight: 600, pointerEvents: "none" }}
+              style={{ fontSize: 9, fill: BRAND.text, fontWeight: 600, pointerEvents: "none" }}
             >
               {hub.city}
             </text>
@@ -343,7 +344,7 @@ function HubLayer({ hubs, routes }: { hubs: HubNode[]; routes: MapRoute[] }) {
               <text
                 textAnchor="middle"
                 y={r + 12}
-                style={{ fontSize: 8, fill: "#8a9ab2", pointerEvents: "none" }}
+                style={{ fontSize: 8, fill: BRAND.muted, pointerEvents: "none" }}
               >
                 {volume} moves
               </text>
@@ -360,10 +361,10 @@ function MapTooltip({ route }: { route: MapRoute }) {
   return (
     <div style={{
       position: "absolute", bottom: 14, left: 14, right: 14,
-      background: "rgba(13, 21, 40, 0.94)", backdropFilter: "blur(8px)",
+      background: "rgba(255, 255, 255, 0.96)", backdropFilter: "blur(8px)",
       border: `1px solid ${route.color}55`, borderRadius: 10,
       padding: "12px 14px", pointerEvents: "none", zIndex: 10,
-      boxShadow: `0 8px 32px rgba(0,0,0,0.45), 0 0 0 1px ${route.color}22 inset`,
+      boxShadow: "var(--shadow-md)",
     }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <div style={{
@@ -371,26 +372,26 @@ function MapTooltip({ route }: { route: MapRoute }) {
           background: route.color, boxShadow: `0 0 12px ${route.color}`,
         }} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#e6ecf5" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: BRAND.text }}>
             {route.originLabel} → {route.destLabel}
             <span style={{ marginLeft: 8, fontSize: 11, color: route.color }}>
               {outcomeLabel(route.outcome)}
             </span>
           </div>
-          <div style={{ fontSize: 11, color: "#8a9ab2", marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: BRAND.muted, marginTop: 4 }}>
             {c.carrier_name || "Unknown"} · MC {c.mc_number} · {c.load_id || "—"} · {route.miles} mi
           </div>
           <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 12 }}>
             {c.loadboard_rate > 0 && (
-              <span>Posted <strong style={{ color: "#e6ecf5" }}>{fmtMoney(c.loadboard_rate)}</strong></span>
+              <span>Posted <strong style={{ color: BRAND.text }}>{fmtMoney(c.loadboard_rate)}</strong></span>
             )}
             {c.agreed_rate > 0 && (
-              <span>Agreed <strong style={{ color: "#19c37d" }}>{fmtMoney(c.agreed_rate)}</strong></span>
+              <span>Agreed <strong style={{ color: BRAND.greenDark }}>{fmtMoney(c.agreed_rate)}</strong></span>
             )}
             {route.margin > 0 && (
-              <span>Margin <strong style={{ color: "#4ea1ff" }}>{fmtMoney(route.margin)}</strong></span>
+              <span>Margin <strong style={{ color: BRAND.green }}>{fmtMoney(route.margin)}</strong></span>
             )}
-            <span style={{ color: "#8a9ab2" }}>{c.equipment_type || "—"}</span>
+            <span style={{ color: BRAND.muted }}>{c.equipment_type || "—"}</span>
           </div>
         </div>
       </div>
@@ -410,17 +411,17 @@ function LanePanel({
 }) {
   return (
     <div style={{
-      background: "#0a1020", border: "1px solid #1f2c4a", borderRadius: 12,
+      background: BRAND.white, border: `1px solid ${BRAND.border}`, borderRadius: 12,
       display: "flex", flexDirection: "column", overflow: "hidden", maxHeight: 440,
     }}>
-      <div style={{ padding: "12px 14px", borderBottom: "1px solid #1f2c4a" }}>
-        <div style={{ fontSize: 11, color: "#8a9ab2", textTransform: "uppercase", letterSpacing: 0.6 }}>
+      <div style={{ padding: "12px 14px", borderBottom: `1px solid ${BRAND.border}` }}>
+        <div style={{ fontSize: 11, color: BRAND.muted, textTransform: "uppercase", letterSpacing: 0.6 }}>
           Active lanes
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#4ea1ff", marginTop: 4 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: BRAND.greenDark, marginTop: 4 }}>
           {fmtMoney(totalMargin)}
         </div>
-        <div style={{ fontSize: 10, color: "#8a9ab2" }}>booked margin on map</div>
+        <div style={{ fontSize: 10, color: BRAND.muted }}>booked margin on map</div>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
         {routes.map((r) => {
@@ -435,17 +436,17 @@ function LanePanel({
               style={{
                 display: "block", width: "100%", textAlign: "left",
                 padding: "10px 10px", marginBottom: 6, borderRadius: 8,
-                border: `1px solid ${active ? r.color + "88" : "#1f2c4a"}`,
-                background: active ? r.color + "14" : "#111a2e",
+                border: `1px solid ${active ? r.color + "88" : BRAND.border}`,
+                background: active ? r.color + "14" : BRAND.bgAlt,
                 cursor: "pointer", transition: "all 0.12s",
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#e6ecf5" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: BRAND.text }}>
                 {r.originLabel} → {r.destLabel}
               </div>
-              <div style={{ fontSize: 10, color: "#8a9ab2", marginTop: 3 }}>
+              <div style={{ fontSize: 10, color: BRAND.muted, marginTop: 3 }}>
                 {r.miles} mi · {outcomeLabel(r.outcome)}
-                {r.margin > 0 && <span style={{ color: "#4ea1ff" }}> · +{fmtMoney(r.margin)}</span>}
+                {r.margin > 0 && <span style={{ color: BRAND.greenDark }}> · +{fmtMoney(r.margin)}</span>}
               </div>
             </button>
           );
@@ -458,9 +459,9 @@ function LanePanel({
 function EmptyMap() {
   return (
     <div style={{
-      color: "#8a9ab2", textAlign: "center", padding: "60px 0", fontSize: 13,
-      background: "radial-gradient(ellipse at center, #0f2847 0%, #060b14 100%)",
-      borderRadius: 12, border: "1px solid #1f2c4a",
+      color: BRAND.muted, textAlign: "center", padding: "60px 0", fontSize: 13,
+      background: BRAND.bgAlt,
+      borderRadius: 12, border: `1px solid ${BRAND.border}`,
     }}>
       No geocodable lanes in this window — calls need origin/destination cities we recognize.
     </div>

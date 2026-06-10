@@ -27,9 +27,7 @@ services:
     depends_on:
       - backend
 
-  # Caddy reverse proxy gives us automatic HTTPS in production (Let's Encrypt)
-  # In local dev you don't need it; just hit http://localhost:5173 / :8000 directly.
-  # Uncomment when deploying to a domain.
+  # Production HTTPS with Let's Encrypt — replace domains in caddy/Caddyfile first.
   #
   # caddy:
   #   image: caddy:2-alpine
@@ -45,7 +43,28 @@ services:
   #     - backend
   #     - frontend
 
+  # Local HTTPS (self-signed via Caddy internal CA). See docs/security.md
+  caddy:
+    profiles: ["https"]
+    image: caddy:2-alpine
+    container_name: carrier-caddy-local
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+      - "8444:8444"
+    volumes:
+      - ./caddy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - caddy_local_data:/data
+    depends_on:
+      - backend
+      - frontend
+
 volumes:
   backend_data:
+
+  # Uncomment for production VPS deploy with real domains (see caddy/Caddyfile):
   # caddy_data:
   # caddy_config:
+
+  # Used by: docker compose --profile https up
+  caddy_local_data:

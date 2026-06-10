@@ -1,10 +1,8 @@
-"""Async SQLAlchemy engine + session and ORM models."""
+"""SQLAlchemy ORM models."""
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, DateTime, JSON, Text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.settings import settings
+from sqlalchemy import DateTime, Float, Integer, JSON, String, Text
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
@@ -27,7 +25,6 @@ class Load(Base):
     num_of_pieces: Mapped[int] = mapped_column(Integer, default=1)
     miles: Mapped[float] = mapped_column(Float, default=0)
     dimensions: Mapped[str] = mapped_column(String, default="")
-    # Internal — not returned to carrier. Used to evaluate counter-offers.
     min_acceptable_rate: Mapped[float] = mapped_column(Float, default=0)
 
 
@@ -38,43 +35,24 @@ class CallRecord(Base):
     run_id: Mapped[str] = mapped_column(String, index=True, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
-    # Carrier
     mc_number: Mapped[str] = mapped_column(String, default="", index=True)
     carrier_name: Mapped[str] = mapped_column(String, default="")
     carrier_eligible: Mapped[bool] = mapped_column(default=False)
 
-    # Load + commercial outcome
     load_id: Mapped[str] = mapped_column(String, default="", index=True)
     loadboard_rate: Mapped[float] = mapped_column(Float, default=0)
     agreed_rate: Mapped[float] = mapped_column(Float, default=0)
     num_counter_offers: Mapped[int] = mapped_column(Integer, default=0)
     counter_offers: Mapped[list] = mapped_column(JSON, default=list)
 
-    # Lane (extracted)
     origin: Mapped[str] = mapped_column(String, default="")
     destination: Mapped[str] = mapped_column(String, default="")
     equipment_type: Mapped[str] = mapped_column(String, default="")
 
-    # Classification
-    outcome: Mapped[str] = mapped_column(String, default="other", index=True)  # load_booked, price_rejected, ...
-    sentiment: Mapped[str] = mapped_column(String, default="neutral", index=True)  # positive, neutral, negative
+    outcome: Mapped[str] = mapped_column(String, default="other", index=True)
+    sentiment: Mapped[str] = mapped_column(String, default="neutral", index=True)
     classification_reasoning: Mapped[str] = mapped_column(Text, default="")
 
-    # Misc
     duration_seconds: Mapped[float] = mapped_column(Float, default=0)
     transcript: Mapped[str] = mapped_column(Text, default="")
     raw_payload: Mapped[dict] = mapped_column(JSON, default=dict)
-
-
-engine = create_async_engine(settings.database_url, echo=False, future=True)
-SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-
-
-async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
-async def get_session() -> AsyncSession:  # type: ignore[misc]
-    async with SessionLocal() as session:
-        yield session
