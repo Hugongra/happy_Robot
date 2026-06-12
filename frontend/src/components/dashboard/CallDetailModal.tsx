@@ -1,8 +1,13 @@
-import { useEffect } from "react";
-import type { CallRecord } from "../../lib/dashboard/types";
-import { fmtMoney, fmtWhen, brokerMargin } from "../../lib/dashboard/format";
+import { useEffect, useState } from "react";
+import type { CallRecord, TransferStatus } from "../../lib/dashboard/types";
+import {
+  fmtMoney, fmtScheduled, fmtWhen, brokerMargin, getLastCarrierOffer,
+} from "../../lib/dashboard/format";
+import {
+  hasLoadMatched, resolveFmcsaStatus, resolveLoadDetails, type FmcsaStatus,
+} from "../../lib/dashboard/loadDetails";
 import { BRAND } from "../../lib/brand";
-import { NegotiationLadderInline } from "./NegotiationLadderChart";
+import { NegotiationLadderSteps } from "./NegotiationLadderSteps";
 import { OutcomeTag, SentimentTag } from "./ui";
 
 type Props = {
@@ -10,7 +15,42 @@ type Props = {
   onClose: () => void;
 };
 
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < breakpoint,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [breakpoint]);
+  return isMobile;
+}
+
+const FMCSA_STYLES: Record<FmcsaStatus, { label: string; color: string; bg: string }> = {
+  verified: { label: "Verified", color: BRAND.greenDark, bg: BRAND.greenLight },
+  rejected: { label: "Rejected", color: BRAND.danger, bg: "#fef2f2" },
+  not_provided: { label: "Not provided", color: BRAND.muted, bg: BRAND.bgAlt },
+};
+
+function TransferStatusRow({ status }: { status: TransferStatus }) {
+  if (status === "n/a") {
+    return <span style={{ color: BRAND.muted }}>Not applicable</span>;
+  }
+  if (status === "successful") {
+    return <span style={{ color: BRAND.greenDark, fontWeight: 600 }}>Successful</span>;
+  }
+  if (status === "failed") {
+    return <span style={{ color: BRAND.danger, fontWeight: 600 }}>Failed</span>;
+  }
+  return <span style={{ color: BRAND.warn, fontWeight: 600 }}>Pending</span>;
+}
+
 export function CallDetailModal({ call, onClose }: Props) {
+  const isMobile = useIsMobile();
+
   useEffect(() => {
     if (!call) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -24,10 +64,46 @@ export function CallDetailModal({ call, onClose }: Props) {
 
   if (!call) return null;
 
-  const margin = brokerMargin(call.loadboard_rate, call.agreed_rate);
-  const transcriptLines = (call.transcript || "No transcript available for this call.")
-    .split(/\n+/)
-    .filter(Boolean);
+  const margin = call.broker_margin ?? brokerMargin(call.loadboard_rate, call.agreed_rate);
+  const load = resolveLoadDetails(call);
+  const fmcsa = resolveFmcsaStatus(call);
+  const fmcsaStyle = FMCSA_STYLES[fmcsa];
+  const transferStatus = call.transfer_status ?? "n/a";
+  const rawPayload = call.raw_payload && Object.keys(call.raw_payload).length > 0
+    ? call.raw_payload
+    : buildFallbackPayload(call);
+
+  const panelStyle: React.CSSProperties = isMobile
+    ? {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      width: "min(520px, calc(100vw - 24px))",
+      maxHeight: "calc(100vh - 32px)",
+      background: BRAND.white,
+      borderRadius: 12,
+      zIndex: 1001,
+      display: "flex",
+      flexDirection: "column",
+      boxShadow: "var(--shadow-md)",
+      border: `1px solid ${BRAND.border}`,
+      animation: "fadeIn 0.2s ease-out",
+    }
+    : {
+      position: "fixed",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: "min(560px, 100vw)",
+      background: BRAND.white,
+      borderLeft: `2px solid ${BRAND.green}`,
+      zIndex: 1001,
+      display: "flex",
+      flexDirection: "column",
+      boxShadow: "var(--shadow-md)",
+      animation: "slideIn 0.22s ease-out",
+    };
 
   return (
     <>
@@ -42,33 +118,35 @@ export function CallDetailModal({ call, onClose }: Props) {
         role="dialog"
         aria-modal
         aria-label="Call details"
-        style={{
-          position: "fixed", top: 0, right: 0, bottom: 0, width: "min(560px, 100vw)",
-          background: BRAND.white, borderLeft: `2px solid ${BRAND.green}`,
-          zIndex: 1001, display: "flex", flexDirection: "column",
-          boxShadow: "var(--shadow-md)",
-          animation: "slideIn 0.22s ease-out",
-        }}
+        style={panelStyle}
       >
         <header style={{
-          padding: "20px 24px", borderBottom: `1px solid ${BRAND.border}`,
-          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "20px 24px",
+          borderBottom: `1px solid ${BRAND.border}`,
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
           background: BRAND.bgAlt,
+          borderRadius: isMobile ? "12px 12px 0 0" : undefined,
         }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: BRAND.muted, marginBottom: 4 }}>
-              {fmtWhen(call.created_at)}
-              {call.isDemo && <span style={{ marginLeft: 8, color: BRAND.greenDark }}>· Demo</span>}
-            </div>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: BRAND.text }}>
               {call.carrier_name || "Unknown carrier"}
             </h2>
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <OutcomeTag outcome={call.outcome} />
-              <SentimentTag sentiment={call.sentiment} />
+            <div style={{ fontSize: 13, color: BRAND.textSecondary, marginTop: 4 }}>
+              MC {call.mc_number?.trim() || "—"}
+            </div>
+            <div style={{ fontSize: 11, color: BRAND.muted, marginTop: 4 }}>
+              {fmtWhen(call.created_at)}
+              {call.isDemo && <span style={{ marginLeft: 8, color: BRAND.greenDark }}>· Demo</span>}
+            </div>
+            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <OutcomeTag outcome={call.outcome || "pending"} />
+              <SentimentTag sentiment={call.sentiment || "neutral"} />
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             aria-label="Close"
             style={{
@@ -81,89 +159,144 @@ export function CallDetailModal({ call, onClose }: Props) {
         </header>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
-          <section style={{ marginBottom: 24 }}>
-            <SectionTitle>Load summary</SectionTitle>
-            <div style={grid2}>
-              <Field label="MC" value={call.mc_number || "—"} />
-              <Field label="Load ID" value={call.load_id || "—"} />
-              <Field label="Lane" value={`${call.origin || "—"} → ${call.destination || "—"}`} wide />
-              <Field label="Equipment" value={call.equipment_type || "—"} />
-              <Field label="Posted rate" value={call.loadboard_rate ? fmtMoney(call.loadboard_rate) : "—"} />
-              <Field label="Agreed rate" value={call.agreed_rate ? fmtMoney(call.agreed_rate) : "—"} tint={BRAND.greenDark} />
-              <Field label="Broker margin" value={margin ? fmtMoney(margin) : "—"} tint={BRAND.green} />
-              <Field label="Rounds" value={String(call.num_counter_offers)} />
-              <Field label="Duration" value={call.duration_seconds ? `${Math.round(call.duration_seconds)}s` : "—"} />
+          <section style={{ marginBottom: 22 }}>
+            <SectionTitle>FMCSA verification</SectionTitle>
+            <span style={{
+              display: "inline-block",
+              fontSize: 12,
+              fontWeight: 700,
+              color: fmcsaStyle.color,
+              background: fmcsaStyle.bg,
+              padding: "4px 10px",
+              borderRadius: 999,
+            }}>
+              {fmcsaStyle.label}
+            </span>
+          </section>
+
+          <section style={{ marginBottom: 22 }}>
+            <SectionTitle>Load details</SectionTitle>
+            {!hasLoadMatched(call) ? (
+              <EmptyNote>No load matched on this call</EmptyNote>
+            ) : load ? (
+              <div style={grid2}>
+                <Field label="Load ID" value={load.load_id} />
+                <Field label="Equipment" value={load.equipment} />
+                <Field label="Lane" value={load.lane} wide />
+                <Field label="Pickup" value={fmtScheduled(load.pickup_datetime)} />
+                <Field label="Delivery" value={fmtScheduled(load.delivery_datetime)} />
+                <Field label="Miles" value={load.miles > 0 ? `${load.miles.toLocaleString()} mi` : "—"} />
+                <Field label="Weight" value={load.weight > 0 ? `${load.weight.toLocaleString()} lbs` : "—"} />
+                <Field label="Commodity" value={load.commodity || "—"} wide />
+                <Field
+                  label="Posted rate"
+                  value={load.posted_rate > 0 ? fmtMoney(load.posted_rate) : "—"}
+                />
+              </div>
+            ) : null}
+          </section>
+
+          <section style={{ marginBottom: 22 }}>
+            <SectionTitle>Negotiation ladder</SectionTitle>
+            <div style={panelBox}>
+              <NegotiationLadderSteps call={call} />
             </div>
           </section>
 
-          <NegotiationLadderInline call={call} />
-
-          <section style={{ marginBottom: 24 }}>
-            <SectionTitle>AI classification reasoning</SectionTitle>
+          <section style={{ marginBottom: 22 }}>
+            <SectionTitle>Margin captured</SectionTitle>
             <div style={{
-              background: BRAND.bgAlt, border: `1px solid ${BRAND.border}`, borderRadius: 10,
-              padding: 14, fontSize: 13, lineHeight: 1.6, color: BRAND.textSecondary,
+              fontSize: 22,
+              fontWeight: 800,
+              color: margin > 0 ? BRAND.greenDark : BRAND.muted,
             }}>
-              {call.classification_reasoning?.trim()
-                || "No classification reasoning was captured for this call. Add `classification_reasoning` to the HappyRobot post-call webhook."}
+              {margin > 0 ? fmtMoney(margin) : "—"}
+            </div>
+            {margin <= 0 && call.outcome !== "load_booked" && getLastCarrierOffer(call) && (
+              <div style={{ fontSize: 12, color: BRAND.muted, marginTop: 4 }}>
+                No booking — last carrier ask {fmtMoney(getLastCarrierOffer(call)!)}
+              </div>
+            )}
+          </section>
+
+          <section style={{ marginBottom: 22 }}>
+            <SectionTitle>Transfer status</SectionTitle>
+            <div style={{ fontSize: 14 }}>
+              <TransferStatusRow status={transferStatus} />
             </div>
           </section>
 
           <section>
-            <SectionTitle>Call transcript</SectionTitle>
-            <div style={{
-              background: BRAND.bg, border: `1px solid ${BRAND.border}`, borderRadius: 10,
-              maxHeight: 340, overflowY: "auto", padding: 12,
+            <details style={{
+              background: BRAND.bgAlt,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 10,
+              padding: "10px 14px",
             }}>
-              {transcriptLines.map((line, i) => {
-                const isAgent = /^agent:/i.test(line.trim());
-                const isCarrier = /^carrier:/i.test(line.trim());
-                const text = line.replace(/^(agent|carrier):\s*/i, "");
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      justifyContent: isAgent ? "flex-start" : isCarrier ? "flex-end" : "center",
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div style={{
-                      maxWidth: "88%",
-                      padding: "8px 12px",
-                      borderRadius: isAgent ? "12px 12px 12px 4px" : "12px 12px 4px 12px",
-                      background: isAgent ? BRAND.white : isCarrier ? BRAND.greenLight : BRAND.bgAlt,
-                      border: `1px solid ${isAgent ? BRAND.border : isCarrier ? BRAND.greenMuted : BRAND.border}`,
-                      fontSize: 12,
-                      lineHeight: 1.5,
-                      color: BRAND.text,
-                    }}>
-                      {(isAgent || isCarrier) && (
-                        <div style={{
-                          fontSize: 10, fontWeight: 700, marginBottom: 4,
-                          color: isAgent ? BRAND.greenDark : BRAND.green,
-                          textTransform: "uppercase", letterSpacing: 0.5,
-                        }}>
-                          {isAgent ? "Alex" : "Carrier"}
-                        </div>
-                      )}
-                      {text || line}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+              <summary style={{
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 700,
+                color: BRAND.greenDark,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+                userSelect: "none",
+              }}>
+                Raw extracted data
+              </summary>
+              <pre style={{
+                margin: "12px 0 0",
+                fontSize: 11,
+                lineHeight: 1.5,
+                overflowX: "auto",
+                color: BRAND.textSecondary,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}>
+                {JSON.stringify(rawPayload, null, 2)}
+              </pre>
+            </details>
           </section>
         </div>
       </aside>
-      <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+      <style>{`
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+      `}</style>
     </>
   );
 }
 
+function buildFallbackPayload(call: CallRecord): Record<string, unknown> {
+  return {
+    id: call.id,
+    run_id: call.run_id,
+    mc_number: call.mc_number,
+    carrier_name: call.carrier_name,
+    carrier_eligible: call.carrier_eligible,
+    load_id: call.load_id,
+    origin: call.origin,
+    destination: call.destination,
+    equipment_type: call.equipment_type,
+    loadboard_rate: call.loadboard_rate,
+    agreed_rate: call.agreed_rate,
+    counter_offers: call.counter_offers,
+    outcome: call.outcome,
+    sentiment: call.sentiment,
+    duration_seconds: call.duration_seconds,
+    transcript: call.transcript,
+    classification_reasoning: call.classification_reasoning,
+    sync_source: call.sync_source,
+    platform_status: call.platform_status,
+  };
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 700, color: BRAND.greenDark, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>
+    <div style={{
+      fontSize: 11, fontWeight: 700, color: BRAND.greenDark,
+      textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10,
+    }}>
       {children}
     </div>
   );
@@ -178,10 +311,33 @@ function Field({ label, value, wide, tint }: { label: string; value: string; wid
   );
 }
 
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontSize: 13,
+      color: BRAND.muted,
+      fontStyle: "italic",
+      background: BRAND.bgAlt,
+      border: `1px solid ${BRAND.border}`,
+      borderRadius: 10,
+      padding: 14,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 const grid2: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
   gap: 14,
+  background: BRAND.bgAlt,
+  border: `1px solid ${BRAND.border}`,
+  borderRadius: 10,
+  padding: 14,
+};
+
+const panelBox: React.CSSProperties = {
   background: BRAND.bgAlt,
   border: `1px solid ${BRAND.border}`,
   borderRadius: 10,

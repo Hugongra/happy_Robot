@@ -1,10 +1,30 @@
-# Acme Logistics — Inbound Carrier Sales
+# HappyRobot FDE Technical Challenge Submission
+
+## Acme Logistics — Inbound Carrier Sales
 
 A full implementation of the HappyRobot FDE technical challenge: an AI
 voice agent that takes inbound calls from freight carriers, verifies
 them with FMCSA, matches them to a load, negotiates a price (max 3
 rounds), and hands off to a human sales rep on agreement. Plus a custom
 ops dashboard fed by post-call telemetry and HappyRobot platform sync.
+
+---
+
+## Challenge fit
+
+This repository is structured as a submission for the **FDE Technical Challenge: Inbound Carrier Sales**.
+
+- **Objective 1: Inbound use case** — implemented with a HappyRobot inbound voice agent, FMCSA verification, load search, bounded negotiation, mocked transfer, post-call extraction, outcome classification, and sentiment tracking.
+- **Objective 2: Metrics** — implemented with a custom React + FastAPI dashboard; no HappyRobot analytics UI is used as the reporting surface.
+- **Objective 3: Deployment and infrastructure** — implemented with Docker, local `docker compose`, and live deployment on Fly.io.
+
+### Submission artifacts
+
+- **Build description for the broker** — `deliverables/acme-logistics-build-description.md`
+- **Architecture deep dive** — `docs/architecture.md`
+- **Workflow setup / reproducibility notes** — `docs/workflow-setup.md`
+- **Live deployed dashboard and API** — links below
+- **Code repository** — this repository
 
 ---
 
@@ -16,6 +36,26 @@ ops dashboard fed by post-call telemetry and HappyRobot platform sync.
 | **Web call** | https://acme-carrier-app-hugog.fly.dev/call |
 | **API** | https://acme-carrier-api-hugog.fly.dev |
 | **Swagger** | https://acme-carrier-api-hugog.fly.dev/docs |
+
+---
+
+## What to test in 3 minutes
+
+If you're reviewing this challenge quickly, this is the fastest path:
+
+1. Open the **web call** and start a session as a carrier.
+2. Use demo MC `123456` if FMCSA is unavailable or you want a deterministic happy path.
+3. Ask for a lane like `Dallas -> Atlanta` or `Chicago -> Newark` with `Dry Van`.
+4. Counter on price a couple of times and watch the backend enforce the floor rate and the 3-round cap.
+5. Open the **dashboard**, hit refresh, and confirm the call appears in KPIs, route map, funnel, and recent call logs.
+
+What this proves: real tool use during the call, deterministic pricing guardrails in the backend, and post-call telemetry flowing into ops visibility.
+
+### Why this is a strong fit for the brief
+
+- It uses the **web call trigger**, as requested, instead of buying a phone number.
+- It keeps **pricing logic and compliance-sensitive checks server-side**, not inside the prompt.
+- It shows **customer thinking**, not just workflow wiring: a rep-ready dashboard, telemetry repair path, security basics, and a credible production evolution path.
 
 ---
 
@@ -35,7 +75,7 @@ Browser-based LiveKit session — carriers reach the AI rep without a phone trun
 
 ### Ops dashboard
 
-KPIs, route map, conversion funnel, equipment performance, and live call logs fed by post-call telemetry.
+KPIs, platform savings breakdown, route map, conversion funnel, and live call logs fed by post-call telemetry and HappyRobot sync.
 
 ![Ops dashboard](docs/screenshots/dashboard.png)
 
@@ -206,9 +246,11 @@ The dashboard is read-only; it never writes call data. All writes funnel through
 
 The ops dashboard (`/dashboard`) includes:
 
-- **KPIs** — total calls, booking rate, broker margin, platform savings, avg negotiation rounds, call duration
-- **Route map** — booked lanes on a US map
-- **Charts** — conversion funnel, equipment performance, margin evolution, rate scatter, negotiation ladder, outcomes/sentiment/rounds
+- **KPIs** — total calls, loads booked, booking rate, total broker margin, yield per mile, avg agreed rate, extra margin %, avg negotiation rounds, avg call duration, FMCSA reject %
+- **Platform savings** — a dedicated ROI panel that breaks out agent labor savings, margin captured, and total platform impact for the demo
+- **Route map** — booked lanes on a US map with per-lane broker margin
+- **Operational views** — conversion funnel, equipment performance, missed opportunities, calls by outcome, carrier sentiment, and negotiation rounds distribution
+- **Pricing analysis** — agreed-vs-loadboard scatter plus per-call negotiation ladder
 - **Call logs** — live rows from the API; merges all HappyRobot production runs with webhook records
 - **Call detail modal** — transcript + classification reasoning per row
 - **Auto-refresh** — every 30s (syncs HappyRobot runs, then reloads metrics)

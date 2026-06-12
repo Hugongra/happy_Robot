@@ -51,10 +51,65 @@ def _resolved_agreed(r: CallRecord) -> float:
     )
 
 
+def _transfer_status(r: CallRecord) -> str:
+    if r.outcome != "load_booked":
+        return "n/a"
+    raw = r.raw_payload if isinstance(r.raw_payload, dict) else {}
+    transferred = raw.get("transferred")
+    if transferred is True:
+        return "successful"
+    if transferred is False:
+        return "failed"
+    return "pending"
+
+
+def _load_fields_from_raw(raw: dict) -> dict:
+    """Pull load board fields when stored inside webhook / reconstruction payload."""
+    load = raw.get("load")
+    if not isinstance(load, dict):
+        return {}
+    return {
+        "pickup_datetime": str(load.get("pickup_datetime") or ""),
+        "delivery_datetime": str(load.get("delivery_datetime") or ""),
+        "weight": float(load.get("weight") or 0),
+        "commodity_type": str(load.get("commodity_type") or ""),
+        "miles": float(load.get("miles") or 0),
+    }
+
+
+def _apply_load_row(call: dict, load: Load | None) -> None:
+    if load:
+        call.update({
+            "pickup_datetime": load.pickup_datetime,
+            "delivery_datetime": load.delivery_datetime,
+            "weight": load.weight,
+            "commodity_type": load.commodity_type,
+            "miles": load.miles,
+        })
+        return
+    extras = _load_fields_from_raw(call.get("raw_payload") or {})
+    for key, val in extras.items():
+        if val and not call.get(key):
+            call[key] = val
+
+
+async def _enrich_calls_with_loads(session: AsyncSession, calls: list[dict]) -> None:
+    load_ids = {c.get("load_id") for c in calls if c.get("load_id")}
+    if not load_ids:
+        return
+    rows = (await session.execute(
+        select(Load).where(Load.load_id.in_(load_ids))
+    )).scalars().all()
+    by_id = {row.load_id: row for row in rows}
+    for call in calls:
+        _apply_load_row(call, by_id.get(call.get("load_id") or ""))
+
+
 def _call_to_dict(r: CallRecord, *, include_detail: bool = False) -> dict:
     agreed = _resolved_agreed(r)
     base = {
         "id": r.id,
+        "run_id": r.run_id or "",
         "created_at": to_utc_iso(r.created_at),
         "mc_number": r.mc_number,
         "carrier_name": r.carrier_name,
@@ -73,14 +128,18 @@ def _call_to_dict(r: CallRecord, *, include_detail: bool = False) -> dict:
         "broker_margin": round(r.loadboard_rate - agreed, 2)
         if r.outcome == "load_booked" and r.loadboard_rate > 0 and agreed > 0
         else 0,
+        "transfer_status": _transfer_status(r),
     }
     if include_detail:
         reasoning = r.classification_reasoning or ""
-        if not reasoning and isinstance(r.raw_payload, dict):
-            reasoning = str(r.raw_payload.get("classification_reasoning") or "")
+        raw = r.raw_payload if isinstance(r.raw_payload, dict) else {}
+        if not reasoning:
+            reasoning = str(raw.get("classification_reasoning") or "")
         base.update({
             "transcript": r.transcript or "",
             "classification_reasoning": reasoning,
+            "raw_payload": raw,
+            **_load_fields_from_raw(raw),
         })
     return base
 
@@ -218,12 +277,14 @@ async def recent_calls(
         .order_by(CallRecord.created_at.desc())
         .limit(limit)
     )).scalars().all()
-    return await merge_recent_calls(
+    merged = await merge_recent_calls(
         rows,
         _call_to_dict,
         days=days,
         limit=limit,
     )
+    await _enrich_calls_with_loads(session, merged)
+    return merged
 
 
 @router.post("/metrics/sync-happyrobot")
@@ -249,7 +310,9 @@ async def get_call(call_id: int, session: AsyncSession = Depends(get_session)):
     if not row:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Call not found")
-    return _call_to_dict(row, include_detail=True)
+    detail = _call_to_dict(row, include_detail=True)
+    await _enrich_calls_with_loads(session, [detail])
+    return detail
 
 
 # Legacy endpoint — kept for backwards compatibility

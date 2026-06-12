@@ -28,6 +28,11 @@ export type CallRecord = {
   last_carrier_offer?: number;
   transcript?: string;
   classification_reasoning?: string;
+  raw_payload?: Record<string, unknown>;
+  pickup_datetime?: string;
+  delivery_datetime?: string;
+  weight?: number;
+  commodity_type?: string;
   isDemo?: boolean;
 };
 

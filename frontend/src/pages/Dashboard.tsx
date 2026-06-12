@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { api } from "../lib/api";
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -6,38 +7,56 @@ import {
 import type { CallRecord } from "../lib/dashboard/types";
 import {
   resolveDashboardCalls, aggregateOutcomes, aggregateSentiments,
-  aggregateRounds, buildMarginSeries, enrichSummary,
+  aggregateRounds, enrichSummary,
 } from "../lib/dashboard/mockData";
-import { buildAnalytics, enrichCalls } from "../lib/dashboard/analytics";
+import {
+  buildAnalytics, computeRoiDefaults, countHiddenTestCalls,
+  countInProgressCalls, enrichCalls, filterRealCalls,
+} from "../lib/dashboard/analytics";
 import { useDashboardData } from "../hooks/useDashboardData";
-import { fmtMoney, formatMarketDiscount } from "../lib/dashboard/format";
+import { useLiveMode } from "../hooks/useLiveMode";
+import { fmtMoney, formatNegotiationSavings } from "../lib/dashboard/format";
 import {
   OUTCOME_COLORS, SENTIMENT_COLORS, tooltipStyle, selectStyle, kpiGrid, chartGrid,
   chartGridStroke, chartAxisColor,
 } from "../lib/dashboard/theme";
 import { BRAND } from "../lib/brand";
-import { Kpi, HighlightKpi, Card, ErrBox } from "../components/dashboard/ui";
+import { Kpi, Card, ErrBox } from "../components/dashboard/ui";
 import { CallDetailModal } from "../components/dashboard/CallDetailModal";
 import { RouteMap } from "../components/dashboard/RouteMap";
-import { BrokerMarginChart } from "../components/dashboard/BrokerMarginChart";
 import { RateScatterChart } from "../components/dashboard/RateScatterChart";
 import { NegotiationLadderChart } from "../components/dashboard/NegotiationLadderChart";
 import { ConversionFunnel } from "../components/dashboard/ConversionFunnel";
 import { EquipmentPerformance } from "../components/dashboard/EquipmentPerformance";
 import { MissedOpportunities } from "../components/dashboard/MissedOpportunities";
+import { PlatformSavingsSection } from "../components/dashboard/PlatformSavingsSection";
 import { RecentCallsTable } from "../components/dashboard/RecentCallsTable";
 
 export function DashboardPage() {
   const [days, setDays] = useState(30);
+  const [hideTestCalls, setHideTestCalls] = useState(true);
+  const [liveMode, setLiveMode] = useLiveMode();
   const [selected, setSelected] = useState<CallRecord | null>(null);
-  const { summary, apiCalls, marginApi, err, loading, lastUpdated, refresh } = useDashboardData(days);
+  const { summary, apiCalls, err, loading, lastUpdated, refresh } = useDashboardData(days, liveMode);
 
   const { liveCalls, chartCalls, isDemoMode } = useMemo(
     () => resolveDashboardCalls(apiCalls, { allowDemo: !err }),
     [apiCalls, err],
   );
-  const calls = useMemo(() => enrichCalls(chartCalls), [chartCalls]);
-  const tableCalls = useMemo(() => enrichCalls(liveCalls), [liveCalls]);
+  const filteredChartCalls = useMemo(
+    () => filterRealCalls(chartCalls, hideTestCalls),
+    [chartCalls, hideTestCalls],
+  );
+  const filteredLiveCalls = useMemo(
+    () => filterRealCalls(liveCalls, hideTestCalls),
+    [liveCalls, hideTestCalls],
+  );
+  const hiddenTestCount = useMemo(
+    () => (hideTestCalls ? countHiddenTestCalls(chartCalls) : 0),
+    [chartCalls, hideTestCalls],
+  );
+  const calls = useMemo(() => enrichCalls(filteredChartCalls), [filteredChartCalls]);
+  const tableCalls = useMemo(() => enrichCalls(filteredLiveCalls), [filteredLiveCalls]);
   const webhookCount = useMemo(
     () => liveCalls.filter((c) => c.sync_source !== "platform" && c.outcome !== "platform_run").length,
     [liveCalls],
@@ -50,24 +69,39 @@ export function DashboardPage() {
     () => buildAnalytics(calls, displaySummary, isDemoMode),
     [calls, displaySummary, isDemoMode],
   );
+  const roiDefaults = useMemo(
+    () => computeRoiDefaults(calls, displaySummary, days),
+    [calls, displaySummary, days],
+  );
   const outcomes = useMemo(() => aggregateOutcomes(calls), [calls]);
   const sentiments = useMemo(() => aggregateSentiments(calls), [calls]);
   const rounds = useMemo(() => aggregateRounds(calls), [calls]);
-  const marginSeries = useMemo(() => {
-    const fromCalls = buildMarginSeries(calls);
-    if (!isDemoMode) return fromCalls.length > 0 ? fromCalls : marginApi;
-    return marginApi.length >= fromCalls.length ? marginApi : fromCalls;
-  }, [marginApi, calls, isDemoMode]);
 
-  const marketDiscount = displaySummary
-    ? formatMarketDiscount(displaySummary.rate_delta_pct)
+  const negotiationSavings = displaySummary?.rate_delta_pct != null
+    ? formatNegotiationSavings(displaySummary.rate_delta_pct)
     : null;
+  const inProgressCount = useMemo(
+    () => (isDemoMode ? 0 : countInProgressCalls(liveCalls)),
+    [isDemoMode, liveCalls],
+  );
 
   const updatedLabel = lastUpdated
     ? lastUpdated.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : "—";
 
   const { trends } = analytics;
+
+  const handleSelectCall = useCallback(async (call: CallRecord) => {
+    setSelected(call);
+    if (call.id > 0) {
+      try {
+        const detail = await api<CallRecord>(`/api/metrics/calls/${call.id}`);
+        setSelected((prev) => (prev?.id === call.id ? { ...call, ...detail } : prev));
+      } catch {
+        /* keep list row data */
+      }
+    }
+  }, []);
 
   return (
     <div style={{ maxWidth: 1320, margin: "0 auto" }}>
@@ -77,10 +111,16 @@ export function DashboardPage() {
             Acme Logistics Carrier Operations
           </h1>
           <p style={{ margin: "4px 0 0", color: BRAND.muted, fontSize: 13 }}>
-            Powered by HappyRobot · Ops intelligence · auto-refresh 30s
+            Powered by HappyRobot · Ops intelligence · auto-refresh {liveMode ? "5s" : "30s"}
           </p>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {inProgressCount > 0 && (
+            <span className="live-in-progress-badge">
+              <span className="live-pulse-dot">●</span>
+              {inProgressCount} call{inProgressCount === 1 ? "" : "s"} in progress
+            </span>
+          )}
           <span style={{ fontSize: 11, color: "var(--muted)" }}>
             {loading ? "Updating…" : `Updated ${updatedLabel}`}
           </span>
@@ -94,6 +134,17 @@ export function DashboardPage() {
           >
             Refresh
           </button>
+          <label style={{
+            display: "flex", alignItems: "center", gap: 5,
+            fontSize: 13, color: "var(--muted)", cursor: "pointer", userSelect: "none",
+          }}>
+            <input
+              type="checkbox"
+              checked={liveMode}
+              onChange={(e) => setLiveMode(e.target.checked)}
+            />
+            Live
+          </label>
           <label style={{ color: "var(--muted)", fontSize: 13 }}>Window</label>
           <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} style={selectStyle}>
             <option value={1}>Last 24h</option>
@@ -127,19 +178,13 @@ export function DashboardPage() {
           tint={BRAND.blue}
           trend={trends.yield_per_mile}
         />
-        <HighlightKpi
-          label="Platform Savings"
-          value={fmtMoney(analytics.ai_roi)}
-          sublabel={`${fmtMoney(analytics.human_cost_savings)} agent labor + ${fmtMoney(analytics.extra_margin_captured)} margin`}
-          trend={trends.ai_roi}
-        />
         <Kpi label="Avg agreed rate" value={displaySummary ? fmtMoney(displaySummary.avg_agreed_rate) : "—"} trend={trends.avg_agreed_rate} positiveIsGood={false} />
         <Kpi
-          label="Extra Margin %"
-          value={marketDiscount ? marketDiscount.display : "—"}
-          tint={marketDiscount?.isGood ? BRAND.greenBright : BRAND.danger}
+          label="Negotiation savings"
+          value={negotiationSavings ? negotiationSavings.display : "—"}
+          tint={negotiationSavings?.isSavings ? BRAND.greenBright : BRAND.danger}
           trend={trends.rate_delta_pct}
-          positiveIsGood={false}
+          positiveIsGood
         />
         <Kpi label="Avg rounds" value={displaySummary?.avg_negotiation_rounds ?? "—"} trend={trends.avg_negotiation_rounds} positiveIsGood={false} />
         <Kpi label="Avg call (sec)" value={displaySummary?.avg_call_seconds ?? "—"} trend={trends.avg_call_seconds} positiveIsGood={false} />
@@ -152,10 +197,17 @@ export function DashboardPage() {
         />
       </div>
 
+      <PlatformSavingsSection
+        agentLaborSavings={analytics.human_cost_savings}
+        marginCaptured={analytics.extra_margin_captured}
+        totalCalls={displaySummary?.total_calls ?? 0}
+        roiDefaults={roiDefaults}
+      />
+
       <RouteMap
         calls={calls}
         selectedId={selected?.id ?? null}
-        onSelectRoute={setSelected}
+        onSelectRoute={handleSelectCall}
       />
 
       <div style={chartGrid}>
@@ -209,7 +261,6 @@ export function DashboardPage() {
           </ResponsiveContainer>
         </Card>
 
-        <BrokerMarginChart data={marginSeries} />
         <RateScatterChart calls={calls} />
         <NegotiationLadderChart calls={calls} selectedId={selected?.id ?? null} />
       </div>
@@ -217,10 +268,13 @@ export function DashboardPage() {
       <RecentCallsTable
         calls={tableCalls}
         selectedId={selected?.id ?? null}
-        onSelect={setSelected}
+        onSelect={handleSelectCall}
         isDemoMode={isDemoMode}
         liveCount={liveCalls.length}
         webhookCount={webhookCount}
+        hideTestCalls={hideTestCalls}
+        onHideTestCallsChange={setHideTestCalls}
+        hiddenTestCount={hiddenTestCount}
       />
 
       <CallDetailModal call={selected} onClose={() => setSelected(null)} />

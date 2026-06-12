@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CallRecord } from "../../lib/dashboard/types";
 import { fmtMoney, fmtWhen, getLastCarrierOffer } from "../../lib/dashboard/format";
 import { tableStyle, selectStyle, OUTCOME_COLORS } from "../../lib/dashboard/theme";
@@ -13,6 +13,9 @@ type Props = {
   isDemoMode?: boolean;
   liveCount?: number;
   webhookCount?: number;
+  hideTestCalls?: boolean;
+  onHideTestCallsChange?: (hide: boolean) => void;
+  hiddenTestCount?: number;
 };
 
 function SourceBadge({ isDemoMode, liveCount, webhookCount }: { isDemoMode: boolean; liveCount: number; webhookCount: number }) {
@@ -77,8 +80,36 @@ function TransferCell({ call }: { call: CallRecord }) {
 
 export function RecentCallsTable({
   calls, selectedId, onSelect, isDemoMode = false, liveCount = 0, webhookCount = 0,
+  hideTestCalls = true, onHideTestCallsChange, hiddenTestCount = 0,
 }: Props) {
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
+  const [flashingIds, setFlashingIds] = useState<Set<number>>(() => new Set());
+  const knownIdsRef = useRef<Set<number>>(new Set());
+  const seededRef = useRef(false);
+
+  useEffect(() => {
+    const currentIds = calls.map((c) => c.id);
+    if (!seededRef.current) {
+      knownIdsRef.current = new Set(currentIds);
+      seededRef.current = true;
+      return;
+    }
+
+    const newIds = currentIds.filter((id) => !knownIdsRef.current.has(id));
+    knownIdsRef.current = new Set(currentIds);
+
+    if (newIds.length === 0) return;
+
+    setFlashingIds((prev) => new Set([...prev, ...newIds]));
+    const timer = window.setTimeout(() => {
+      setFlashingIds((prev) => {
+        const next = new Set(prev);
+        newIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [calls]);
 
   const outcomes = useMemo(() => {
     const set = new Set(calls.map((c) => c.outcome));
@@ -107,6 +138,22 @@ export function RecentCallsTable({
               </option>
             ))}
           </select>
+          <label style={{
+            display: "flex", alignItems: "center", gap: 5,
+            fontSize: 11, color: "var(--muted)", cursor: "pointer", userSelect: "none",
+          }}>
+            <input
+              type="checkbox"
+              checked={hideTestCalls}
+              onChange={(e) => onHideTestCallsChange?.(e.target.checked)}
+            />
+            Hide test calls
+          </label>
+          {hideTestCalls && hiddenTestCount > 0 && (
+            <span style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
+              {hiddenTestCount} test/incomplete call{hiddenTestCount === 1 ? "" : "s"} hidden
+            </span>
+          )}
           <span style={{ fontSize: 11, color: "var(--muted)" }}>{filtered.length} rows</span>
         </div>
       }
@@ -128,9 +175,11 @@ export function RecentCallsTable({
             {filtered.map((r) => {
               const margin = r.broker_margin ?? Math.max(r.loadboard_rate - r.agreed_rate, 0);
               const active = selectedId === r.id;
+              const isFlashing = flashingIds.has(r.id);
               return (
                 <tr
                   key={r.id}
+                  className={isFlashing ? "call-row-flash" : undefined}
                   onClick={() => onSelect(r)}
                   style={{
                     borderTop: `1px solid ${BRAND.border}`,

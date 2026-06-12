@@ -38,6 +38,33 @@
       }
       a { color: var(--accent); text-decoration: none; }
       button { font: inherit; cursor: pointer; }
+      @keyframes live-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
+      }
+      .live-in-progress-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #ef4444;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        padding: 4px 10px;
+        border-radius: 999px;
+      }
+      .live-in-progress-badge .live-pulse-dot {
+        animation: live-pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes call-row-flash {
+        0% { background-color: #fef9c3; }
+        70% { background-color: #fef9c3; }
+        100% { background-color: transparent; }
+      }
+      .call-row-flash td {
+        animation: call-row-flash 2s ease-out forwards;
+      }
     </style>
   </head>
   <body>

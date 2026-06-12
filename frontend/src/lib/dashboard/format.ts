@@ -1,3 +1,5 @@
+import type { CallRecord } from "./types";
+
 export function fmt(n: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n);
 }
@@ -7,6 +9,21 @@ export function fmtMoney(n: number) {
 }
 
 /** Parse UTC ISO from API and show in the user's local timezone. */
+export function fmtScheduled(iso: string): string {
+  if (!iso?.trim()) return "—";
+  const utc = iso.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`;
+  const d = new Date(utc);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
+}
+
 export function fmtWhen(iso: string): string {
   const utc = iso.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`;
   return new Intl.DateTimeFormat(undefined, {
@@ -18,15 +35,6 @@ export function fmtWhen(iso: string): string {
     second: "2-digit",
     hour12: false,
   }).format(new Date(utc));
-}
-
-export function fmtChartTick(iso: string, loadId?: string): string {
-  const utc = iso.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`;
-  const d = new Date(utc);
-  const date = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(d);
-  const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
-  const base = `${date} ${time}`;
-  return loadId ? `${base} · ${loadId}` : base;
 }
 
 export function brokerMargin(loadboard: number, agreed: number): number {
@@ -74,12 +82,24 @@ function estimateLaneMiles(origin: string, destination: string): number {
   return pairs[key] ?? 500;
 }
 
-/** Negative rate_delta_pct = broker pays less than posted (good). */
-export function formatMarketDiscount(rateDeltaPct: number): { display: string; isGood: boolean } {
-  const isGood = rateDeltaPct < 0;
-  const abs = Math.abs(rateDeltaPct);
+/** Average (loadboard − agreed) / loadboard over booked loads with a posted rate. */
+export function computeNegotiationSavingsPct(calls: CallRecord[]): number | null {
+  const booked = calls.filter((c) => c.outcome === "load_booked" && c.loadboard_rate > 0);
+  if (booked.length === 0) return null;
+  const avg = booked.reduce(
+    (s, c) => s + (c.loadboard_rate - c.agreed_rate) / c.loadboard_rate,
+    0,
+  ) / booked.length;
+  return Math.round(avg * 1000) / 10;
+}
+
+/** Positive = broker savings; negative = overpayment vs posted. */
+export function formatNegotiationSavings(pct: number): { display: string; isSavings: boolean } {
+  const isSavings = pct >= 0;
+  const abs = Math.abs(pct);
+  const formatted = Number.isInteger(abs) ? String(abs) : abs.toFixed(1);
   return {
-    display: `${isGood ? "▼" : "▲"} ${abs}%`,
-    isGood,
+    display: isSavings ? `+${formatted}%` : `-${formatted}%`,
+    isSavings,
   };
 }

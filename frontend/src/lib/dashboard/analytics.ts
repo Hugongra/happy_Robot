@@ -1,11 +1,163 @@
 import type {
   CallRecord, DashboardAnalytics, EquipmentStat, FunnelStep,
-  KpiTrend, MissedOpportunity, Summary,
+  MissedOpportunity, Summary,
 } from "./types";
 import { brokerMargin, getLastCarrierOffer, resolveMiles } from "./format";
-import { DEMO_MISSED_OPPORTUNITIES, DEMO_KPI_TRENDS } from "./mockData";
+import { DEMO_MISSED_OPPORTUNITIES } from "./mockData";
 
 const HUMAN_AGENT_COST_PER_CALL = 15;
+const MS_PER_DAY = 86_400_000;
+const DAYS_PER_YEAR = 365;
+
+export function isTestOrIncompleteCall(c: CallRecord): boolean {
+  return c.outcome === "platform_run" || !c.mc_number?.trim();
+}
+
+export function filterRealCalls(calls: CallRecord[], hideTest: boolean): CallRecord[] {
+  if (!hideTest) return calls;
+  return calls.filter((c) => !isTestOrIncompleteCall(c));
+}
+
+export function countHiddenTestCalls(calls: CallRecord[]): number {
+  return calls.filter(isTestOrIncompleteCall).length;
+}
+
+const FINAL_PLATFORM_STATUSES = new Set([
+  "completed", "complete", "done", "failed", "cancelled", "canceled",
+]);
+
+/** Run still active or awaiting post-call webhook / classification. */
+export function isCallInProgress(c: CallRecord): boolean {
+  if (c.sync_source === "platform") return true;
+
+  const outcome = (c.outcome ?? "").trim().toLowerCase();
+  if (!outcome || outcome === "pending") return true;
+
+  const status = (c.platform_status ?? "").trim().toLowerCase();
+  if (status && !FINAL_PLATFORM_STATUSES.has(status)) return true;
+
+  return false;
+}
+
+export function countInProgressCalls(calls: CallRecord[]): number {
+  return calls.filter(isCallInProgress).length;
+}
+
+export type PlatformSavings = {
+  agentLaborSavings: number;
+  marginCaptured: number;
+  total: number;
+  totalCalls: number;
+};
+
+export type PredictedAnnualSavings = {
+  predictedAnnual: number;
+  daysSinceFirstCall: number;
+  totalSavingsToDate: number;
+};
+
+export function computePlatformSavings(
+  calls: CallRecord[],
+  costPerCall = HUMAN_AGENT_COST_PER_CALL,
+): PlatformSavings {
+  const totalCalls = calls.length;
+  const marginCaptured = calls
+    .filter((c) => c.outcome === "load_booked")
+    .reduce((s, c) => s + brokerMargin(c.loadboard_rate, c.agreed_rate), 0);
+  const agentLaborSavings = totalCalls * costPerCall;
+  return {
+    agentLaborSavings,
+    marginCaptured,
+    total: agentLaborSavings + marginCaptured,
+    totalCalls,
+  };
+}
+
+export type RoiDefaults = {
+  callsPerDay: number;
+  bookingRatePct: number;
+  costPerCall: number;
+  avgMarginPerBooked: number;
+};
+
+const DEFAULT_MARGIN_PER_BOOKED = 25;
+
+/** Defaults for the ROI calculator from filtered window data. */
+export function computeRoiDefaults(
+  calls: CallRecord[],
+  summary: Summary | null,
+  windowDays: number,
+): RoiDefaults {
+  const window = Math.max(windowDays, 1);
+  const callsPerDay = Math.max(1, Math.ceil(calls.length / window));
+
+  const bookingRatePct = summary?.booking_rate ?? (
+    calls.length
+      ? Math.round((calls.filter((c) => c.outcome === "load_booked").length / calls.length) * 1000) / 10
+      : 0
+  );
+
+  const booked = calls.filter((c) => c.outcome === "load_booked");
+  const margins = booked
+    .map((c) => brokerMargin(c.loadboard_rate, c.agreed_rate))
+    .filter((m) => m > 0);
+  const avgMarginPerBooked = margins.length
+    ? Math.round(margins.reduce((s, m) => s + m, 0) / margins.length)
+    : DEFAULT_MARGIN_PER_BOOKED;
+
+  return {
+    callsPerDay,
+    bookingRatePct,
+    costPerCall: HUMAN_AGENT_COST_PER_CALL,
+    avgMarginPerBooked,
+  };
+}
+
+export function computeRoiProjection(
+  callsPerDay: number,
+  bookingRatePct: number,
+  costPerCall: number,
+  avgMarginPerBooked: number,
+) {
+  const annualLaborSavings = Math.round(callsPerDay * DAYS_PER_YEAR * costPerCall);
+  const bookingRate = bookingRatePct / 100;
+  const annualNegotiationMargin = Math.round(
+    callsPerDay * DAYS_PER_YEAR * bookingRate * avgMarginPerBooked,
+  );
+  return {
+    annualLaborSavings,
+    annualNegotiationMargin,
+    totalAnnualSavings: annualLaborSavings + annualNegotiationMargin,
+  };
+}
+
+export function computePredictedAnnualSavings(
+  calls: CallRecord[],
+  costPerCall = HUMAN_AGENT_COST_PER_CALL,
+): PredictedAnnualSavings | null {
+  if (calls.length === 0) return null;
+
+  const { total } = computePlatformSavings(calls, costPerCall);
+  const timestamps = calls
+    .map((c) => {
+      const iso = c.created_at.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(c.created_at)
+        ? c.created_at
+        : `${c.created_at}Z`;
+      return new Date(iso).getTime();
+    })
+    .filter((t) => !Number.isNaN(t));
+  if (timestamps.length === 0) return null;
+
+  const firstCallMs = Math.min(...timestamps);
+  const daysSinceFirstCall = Math.max((Date.now() - firstCallMs) / MS_PER_DAY, 1);
+  const predictedAnnual = Math.round((total / daysSinceFirstCall) * DAYS_PER_YEAR);
+
+  return {
+    predictedAnnual,
+    daysSinceFirstCall: Math.ceil(daysSinceFirstCall),
+    totalSavingsToDate: total,
+  };
+}
 
 export function buildFunnel(calls: CallRecord[]): FunnelStep[] {
   const total = calls.length || 1;
@@ -127,21 +279,6 @@ export function buildAnalytics(
     funnel: buildFunnel(enriched),
     equipment: buildEquipmentStats(enriched),
     missed_opportunities: isDemoMode ? DEMO_MISSED_OPPORTUNITIES : [],
-    trends: summary ? deriveTrends(summary, enriched) : DEMO_KPI_TRENDS,
-  };
-}
-
-function deriveTrends(_summary: Summary, calls: CallRecord[]): Record<string, KpiTrend> {
-  const booked = calls.filter((c) => c.outcome === "load_booked").length;
-  const bookingRate = calls.length ? (booked / calls.length) * 100 : 0;
-  return {
-    ...DEMO_KPI_TRENDS,
-    total_calls: { delta_pct: 12, direction: "up", label: "+12% vs last week" },
-    booked_loads: { delta_pct: 8, direction: "up", label: "+8% vs last week" },
-    booking_rate: {
-      delta_pct: bookingRate > 40 ? 5 : -2,
-      direction: bookingRate > 40 ? "up" : "down",
-      label: bookingRate > 40 ? "+5% vs last week" : "-2% vs last week",
-    },
+    trends: {},
   };
 }

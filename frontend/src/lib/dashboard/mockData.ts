@@ -1,28 +1,14 @@
 import type {
-  CallRecord, KpiTrend, MarginPoint, MissedOpportunity,
+  CallRecord, MissedOpportunity,
   OutcomeCount, RoundCount, SentimentCount, Summary,
 } from "./types";
-import { brokerMargin, fmtChartTick } from "./format";
+import { brokerMargin, computeNegotiationSavingsPct } from "./format";
 
 const daysAgo = (n: number) => {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
   d.setUTCHours(14 + (n % 5), 10 + n, 0, 0);
   return d.toISOString();
-};
-
-export const DEMO_KPI_TRENDS: Record<string, KpiTrend> = {
-  total_calls: { delta_pct: 12, direction: "up", label: "▲ +12% vs last week" },
-  booked_loads: { delta_pct: 8, direction: "up", label: "▲ +8% vs last week" },
-  booking_rate: { delta_pct: 5, direction: "up", label: "▲ +5% vs last week" },
-  total_broker_margin: { delta_pct: 14, direction: "up", label: "▲ +14% vs last week" },
-  avg_agreed_rate: { delta_pct: -3, direction: "down", label: "▼ -3% vs last week" },
-  rate_delta_pct: { delta_pct: 2, direction: "up", label: "▲ +2pp vs last week" },
-  avg_negotiation_rounds: { delta_pct: -8, direction: "down", label: "▼ -8% vs last week" },
-  avg_call_seconds: { delta_pct: -5, direction: "down", label: "▼ -5% vs last week" },
-  fmcsa_rejection_rate: { delta_pct: -1, direction: "down", label: "▼ -1pp vs last week" },
-  yield_per_mile: { delta_pct: 6, direction: "up", label: "▲ +6% vs last week" },
-  ai_roi: { delta_pct: 18, direction: "up", label: "▲ +18% vs last week" },
 };
 
 export const DEMO_MISSED_OPPORTUNITIES: MissedOpportunity[] = [
@@ -292,25 +278,6 @@ export function aggregateRounds(calls: CallRecord[]): RoundCount[] {
   return Array.from(map, ([rounds, count]) => ({ rounds, count })).sort((a, b) => a.rounds - b.rounds);
 }
 
-export function buildMarginSeries(calls: CallRecord[]): MarginPoint[] {
-  const booked = calls
-    .filter((c) => c.outcome === "load_booked" && c.loadboard_rate > 0 && c.agreed_rate > 0)
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
-  let cumulative = 0;
-  return booked.map((c) => {
-    const margin = brokerMargin(c.loadboard_rate, c.agreed_rate);
-    cumulative += margin;
-    return {
-      date: c.created_at,
-      label: fmtChartTick(c.created_at, c.load_id),
-      margin,
-      cumulative_margin: cumulative,
-      load_id: c.load_id,
-    };
-  });
-}
-
 export function computeTotalBrokerMargin(calls: CallRecord[]): number {
   return calls
     .filter((c) => c.outcome === "load_booked")
@@ -329,6 +296,7 @@ export function enrichSummary(api: Summary | null, calls: CallRecord[], isDemoMo
     const avgPosted = withRates.length
       ? withRates.reduce((s, c) => s + c.loadboard_rate, 0) / withRates.length
       : 0;
+    const negotiationSavings = computeNegotiationSavingsPct(rows);
     const ineligible = rows.filter((c) => c.outcome === "carrier_ineligible").length;
     const avgRounds = rows.length
       ? rows.reduce((s, c) => s + c.num_counter_offers, 0) / rows.length
@@ -345,9 +313,7 @@ export function enrichSummary(api: Summary | null, calls: CallRecord[], isDemoMo
       booking_rate: rows.length ? Math.round((booked.length / rows.length) * 1000) / 10 : 0,
       avg_agreed_rate: Math.round(avgAgreed),
       avg_loadboard_rate: Math.round(avgPosted),
-      rate_delta_pct: avgPosted > 0
-        ? Math.round(((avgAgreed - avgPosted) / avgPosted) * 1000) / 10
-        : api.rate_delta_pct,
+      rate_delta_pct: negotiationSavings ?? api.rate_delta_pct,
       avg_negotiation_rounds: Math.round(avgRounds * 100) / 100,
       avg_call_seconds: Math.round(avgDuration * 10) / 10,
       fmcsa_rejection_rate: rows.length
