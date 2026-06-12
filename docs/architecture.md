@@ -376,6 +376,26 @@ HappyRobot SaaS (voice + workflow)
 | ADR-07 | Webhook always 200 | HappyRobot marks node success | Silent failures need logging/alerts |
 | ADR-08 | Seed JSON load board | No TMS in scope | Not market-realistic rates |
 
+### Server-side negotiation {#server-side-negotiation}
+
+LLMs are unreliable with spoken numbers. The agent calls `POST /api/loads/evaluate-offer` on every carrier offer; the backend returns `accept | counter | reject` plus the counter price. The 3-round cap and per-load floor are enforced in code — testable and auditable. Policy changes are a **code deploy**, not a prompt edit.
+
+### FMCSA backend proxy {#fmcsa-proxy}
+
+HappyRobot tools call `/api/fmcsa/verify` instead of FMCSA directly. The API key stays server-side; responses are normalized to `{ eligible, carrier_name, reason }`. A 5s timeout and demo MC `123456` fallback keep demos reliable when FMCSA is slow or returns 403.
+
+### Dual telemetry path {#dual-telemetry}
+
+Post-call data is **eventually consistent**. Primary path: workflow webhook after AI Extract/Classify. Secondary: `POST /api/metrics/sync-happyrobot` reconstructs records from HappyRobot Runs API tool outputs when the webhook payload is sparse or empty.
+
+### Defensive input normalization {#defensive-normalization}
+
+Tool parameters originate from speech → STT → LLM. The API tolerates dirty input: MC digits stripped of prefixes, city names without state suffixes, equipment typos (`drive van` → `Dry Van`), and progressive search relaxation when a strict lane match returns nothing.
+
+### run_id idempotency {#run-id-idempotency}
+
+HappyRobot `run_id` is the natural idempotency key when upserting `call_records` from platform sync, preventing duplicate rows on re-sync.
+
 ---
 
 ## 11. Failure modes & mitigations
@@ -429,10 +449,73 @@ timeline
 
 ---
 
-## 14. Related documents
+## 14. Layer responsibilities & trust boundaries
+
+| Layer | Owns | Does *not* own |
+|-------|------|----------------|
+| **Frontend** (React) | Web-call UI, dashboard reads, LiveKit client | Business rules, API secrets, pricing decisions |
+| **HappyRobot** | Voice I/O, STT/TTS, LLM orchestration, tool calling, post-call AI | FMCSA keys, load board, negotiation policy, persistence |
+| **Backend** (FastAPI) | Auth, FMCSA proxy, load search, negotiation engine, telemetry sink, metrics | Natural-language conversation |
+
+Secrets and floor rates never reach the client or the LLM. The LLM is a **thin orchestrator**; every decision that affects money, compliance, or auditability runs in Python.
+
+## 15. Scaling path (POC → production)
+
+| Dimension | POC | Production |
+|-----------|-----|------------|
+| Database | SQLite on Fly volume | Postgres + read replica for metrics |
+| Load board | `seed_loads.json` | TMS adapter behind `/api/loads/search` (same contract) |
+| Post-call writes | Synchronous webhook handler | Queue (SQS/RabbitMQ) + worker |
+| FMCSA | Live API per call | Redis cache + stale-while-revalidate |
+| Auth | Build-time `VITE_API_KEY` | SSO proxy; session-gated token endpoint |
+| Voice channel | Web Call (LiveKit) | PSTN trunk + Direct Transfer node |
+| Observability | Fly logs + Swagger | Structured JSON logs, OpenTelemetry, KPI alerts |
+
+Estimated load: **10k calls/day ≈ 0.1 req/s average** — a single Postgres instance and async write queue handle this before horizontal scale.
+
+## 16. CQRS-lite read/write split
+
+- **Commands** (mutate state): `evaluate-offer`, `call-completed` webhook, platform sync
+- **Queries** (read-only): `/api/loads/search`, `/api/metrics/*`
+
+The dashboard is read-only; all writes funnel through the webhook sink or sync job.
+
+## 17. Repository layout
+
+Monorepo: **backend** (API) · **frontend** (SPA) · **caddy** (TLS) · **docs** · **deliverables** · **scripts**.
+
+```
+.
+├── backend/
+│   ├── Dockerfile              Python 3.12 + Uvicorn
+│   ├── fly.toml
+│   └── app/
+│       ├── routers/            voice, fmcsa, loads, webhooks, metrics
+│       ├── services/           platform_sync, run_reconstruction
+│       ├── db/                 models, seed_loads.json
+│       └── utils/              normalize, call_records, search
+├── frontend/
+│   ├── Dockerfile              Node build → nginx
+│   ├── fly.toml
+│   └── src/
+│       ├── pages/              Dashboard, WebCall
+│       ├── components/dashboard/
+│       ├── hooks/              useDashboardData, useLiveMode
+│       └── lib/dashboard/      analytics, mockData, format
+├── caddy/                      TLS reverse proxy (local + production)
+├── docker-compose.yml
+├── docs/                       architecture, deployment, runbook, workflow-setup
+├── deliverables/               broker-facing narrative
+└── scripts/                    smoke.sh
+```
+
+**Layering:** routers → services/utils → DB. No business logic in React beyond presentation and client-side ROI projection. HappyRobot owns conversation; backend owns domain truth.
+
+## 18. Related documents
 
 | Document | Content |
 |----------|---------|
+| [runbook.md](./runbook.md) | Symptom → diagnosis → fix, smoke checks |
 | [workflow-setup.md](./workflow-setup.md) | HappyRobot node configuration |
 | [deployment.md](./deployment.md) | Local, Fly.io, Caddy deploy |
 | [voice-agent-prompt.md](./voice-agent-prompt.md) | Agent conversation policy |

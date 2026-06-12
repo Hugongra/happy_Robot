@@ -30,15 +30,11 @@ HappyRobot workflow webhook tools must send the same header:
 ### Smoke test
 
 ```bash
-# Should fail
-curl -i http://localhost:8000/api/loads/search
-
-# Should succeed
-curl -i -H "X-API-Key: $API_KEY" http://localhost:8000/api/loads/search
-
-# Public
-curl -i http://localhost:8000/healthz
+export BASE_URL=http://localhost:8000 API_KEY=<your-key>
+./scripts/smoke.sh
 ```
+
+Manual checks and full runbook: [`docs/runbook.md`](./runbook.md).
 
 ### Production note
 
