@@ -1,9 +1,9 @@
-"""Entry point for `python -m mcp` from the repository root."""
+"""Entry point for `python -m mcp.server` from the repository root."""
 
 import sys
 from pathlib import Path
 
-_mcp_dir = Path(__file__).resolve().parent
+_mcp_dir = Path(__file__).resolve().parent.parent
 if str(_mcp_dir) not in sys.path:
     sys.path.insert(0, str(_mcp_dir))
 

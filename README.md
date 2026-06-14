@@ -116,9 +116,18 @@ Demo data fills charts only when there are **no** live API calls.
 
 ## MCP server (extra)
 
-Beyond the dashboard UI, the same API is exposed as an **MCP server** so Claude (Desktop, Code, or any MCP client) can query loads, KPIs, and call records in natural language. This demonstrates the API as a reusable contract: the dashboard is one consumer, Claude is another, a future Slack bot or n8n flow would be a third.
+Beyond the dashboard UI, the same API is exposed as a **read-only MCP server** so Claude (Desktop, Code, or any MCP client) can query loads, KPIs, and call records in natural language. Same contract, same `X-API-Key` — the dashboard is one consumer, Claude is another.
 
-Four read-only tools: `search_loads`, `get_metrics_summary`, `get_recent_calls`, `get_call_detail`. Setup and Claude Desktop config: [`mcp/README.md`](mcp/README.md).
+| Tool | What it does |
+|------|----------------|
+| `search_loads` | Open loads on the loadboard (max 10 from API) |
+| `get_metrics_summary` | Aggregated KPIs (60s cache) |
+| `get_recent_calls` | Recent voice-agent calls with filters |
+| `get_call_detail` | Transcript, payload, load, transfer status |
+
+**Resilience:** retries on 429/5xx, metrics cache, rate limit **120 req/min** (configurable via `MCP_RATE_LIMIT_PER_MIN`). Write tools are not implemented — read-only by design.
+
+**Claude Desktop (2 min):** `pip install -r mcp/requirements.txt`, set `CARRIER_API_KEY` in `mcp/.env`, add server with `"args": ["-m", "mcp.server"]` and `"cwd": "<repo root>"`. Full config and demo prompts: [`mcp/README.md`](mcp/README.md).
 
 ---
 
@@ -178,6 +187,8 @@ Frontend bakes `VITE_API_BASE_URL` and `VITE_API_KEY` at build time. HTTPS on Fl
 | `HAPPYROBOT_WORKFLOW_ID` | backend | Workflow for tokens & runs |
 | `VITE_API_BASE_URL` | frontend (build) | Backend URL |
 | `CORS_ORIGINS` | backend | Allowed dashboard origins |
+| `CARRIER_API_KEY` | mcp | MCP server → backend auth (same value as `API_KEY`) |
+| `MCP_RATE_LIMIT_PER_MIN` | mcp | Max backend calls/min per MCP session (default 120) |
 
 ---
 

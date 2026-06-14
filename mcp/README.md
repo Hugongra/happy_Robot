@@ -2,16 +2,73 @@
 
 A read-only [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes the same Carrier Sales FastAPI endpoints the ops dashboard uses. The dashboard is one consumer of the API; Claude Desktop (or any MCP client) is another — same contract, same `X-API-Key` auth.
 
+## Demo quickstart (Claude Desktop, 2 minutes)
+
+1. `pip install -r mcp/requirements.txt`
+2. `cp mcp/.env.example mcp/.env` and fill `CARRIER_API_KEY`.
+3. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "carrier-sales": {
+      "command": "python",
+      "args": ["-m", "mcp.server"],
+      "cwd": "/ABSOLUTE/PATH/TO/REPO",
+      "env": {
+        "CARRIER_API_BASE_URL": "https://acme-carrier-api-hugog.fly.dev",
+        "CARRIER_API_KEY": "<your-key>"
+      }
+    }
+  }
+}
+```
+
+On Windows, use `%APPDATA%\Claude\claude_desktop_config.json` instead.
+
+4. Restart Claude Desktop. Try:
+   - "Show me the carrier-sales KPIs for the last 7 days."
+   - "Any Dallas to Atlanta dry van loads?"
+   - "List the 5 most recent calls and open the first one's details."
+
 ## Tools (read-only)
 
-| Tool | API | Example questions |
-|------|-----|-------------------|
-| `search_loads` | `GET /api/loads/search` | "Any Dallas to Atlanta dry van loads?", "What's posted out of Chicago?" |
-| `get_metrics_summary` | `GET /api/metrics/summary` | "Show me last week's booking rate", "What are our KPIs for 30 days?" |
-| `get_recent_calls` | `GET /api/metrics/recent-calls` | "List recent booked calls", "Show price-rejected calls" |
-| `get_call_detail` | `GET /api/metrics/calls/{id}` | "Open call ID 42", "Show the transcript for call 7" |
+| Tool | API | Defaults | Example questions |
+|------|-----|----------|-------------------|
+| `search_loads` | `GET /api/loads/search` | `limit=10` (backend max 10) | "Any Dallas to Atlanta dry van loads?" |
+| `get_metrics_summary` | `GET /api/metrics/summary` | `window_days=7`, cache 60s | "Show me last week's booking rate" |
+| `get_recent_calls` | `GET /api/metrics/recent-calls` | `limit=15`, `offset=0`, max 50 | "List recent booked calls" |
+| `get_call_detail` | `GET /api/metrics/calls/{id}` | — | "Show the transcript for call 7" |
 
-No write tools. No sync endpoint. No call placement.
+Responses include `x_cache` (`HIT`/`MISS`) on cacheable reads. `get_recent_calls` also returns `total_count`, `has_more`, and `offset` for paging through up to 200 backend rows.
+
+## Future work: write tools
+
+Read-only by design. A future iteration could add write tools (`book_load`, `add_call_note`, `update_load_status`) behind:
+
+- a feature flag (`MCP_WRITE_ENABLED`)
+- explicit human confirmation in the tool response
+- server-side audit log keyed by MCP session
+- per-tool authorization (not all clients get write access)
+
+Not implemented in this submission to keep the surface read-only and the security story simple.
+
+## Architecture
+
+```
+mcp/
+├── stdio_server.py # Tools MCP (read)
+├── server/         # Entry: python -m mcp.server
+├── bootstrap.py    # PyPI mcp import shim
+├── client.py       # httpx client + retries + cache
+├── cache.py        # TTLCache helper
+├── models.py       # Pydantic models
+├── config.py       # pydantic-settings
+├── rate_limit.py   # 120 calls/min per session (configurable)
+└── tests/
+```
+
+**Resilience:** 10s connect / 30s read timeouts, exponential backoff retries (max 3) on HTTP 429/5xx, in-memory cache (60s) for metrics summary, rate limit 120 backend calls/minute per MCP session (configurable).
 
 ## Install
 
@@ -22,13 +79,6 @@ cd mcp
 pip install -r requirements.txt
 cp .env.example .env
 # Edit .env: set CARRIER_API_KEY (must match backend API_KEY)
-```
-
-Or with uv:
-
-```bash
-cd mcp
-uv pip install -r requirements.txt
 ```
 
 ## Run
@@ -43,8 +93,8 @@ python server.py
 Alternatives from repo root:
 
 ```bash
+python -m mcp.server
 python mcp/server.py
-python -m mcp          # uses mcp/__main__.py
 ```
 
 Against the deployed API:
@@ -55,6 +105,16 @@ export CARRIER_API_BASE_URL=https://acme-carrier-api-hugog.fly.dev
 export CARRIER_API_KEY=<your-api-key>
 python server.py
 ```
+
+## Tests
+
+```bash
+cd mcp
+pip install -r requirements.txt
+pytest
+```
+
+HTTP calls are mocked; no live API required.
 
 ## Claude Desktop configuration
 
@@ -68,7 +128,8 @@ Edit `claude_desktop_config.json`:
   "mcpServers": {
     "carrier-sales": {
       "command": "python",
-      "args": ["/ABSOLUTE/PATH/TO/carrier-sales-agent/mcp/server.py"],
+      "args": ["-m", "mcp.server"],
+      "cwd": "/ABSOLUTE/PATH/TO/carrier-sales-agent",
       "env": {
         "CARRIER_API_BASE_URL": "https://acme-carrier-api-hugog.fly.dev",
         "CARRIER_API_KEY": "<your-api-key>"
@@ -88,6 +149,7 @@ Restart Claude Desktop after saving.
 |----------|----------|---------|-------------|
 | `CARRIER_API_BASE_URL` | No | `http://localhost:8000` | FastAPI base URL |
 | `CARRIER_API_KEY` | Yes | — | Sent as `X-API-Key` on every request |
+| `MCP_RATE_LIMIT_PER_MIN` | No | `120` | Max backend calls per minute per MCP session |
 
 Values can be set in `mcp/.env` (loaded via python-dotenv) or in the Claude Desktop `env` block.
 
@@ -95,14 +157,13 @@ Values can be set in `mcp/.env` (loaded via python-dotenv) or in the Claude Desk
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Connection refused | API not running or wrong base URL | Start backend (`docker compose up`) or set `CARRIER_API_BASE_URL` to Fly.io URL |
+| Connection refused | API not running or wrong base URL | Start backend or set `CARRIER_API_BASE_URL` to Fly.io URL |
 | 401 Unauthorized | Key mismatch | Set `CARRIER_API_KEY` equal to backend `API_KEY` |
-| Empty call list | All rows filtered as test calls | Call with `hide_test_calls=false` or make a live web call first |
-| Tool import errors | Running from wrong directory | Run `python server.py` from `mcp/` or use absolute path in Claude config |
+| Rate limit reached | >120 backend calls/min (default) | Wait for retry hint in message or raise `MCP_RATE_LIMIT_PER_MIN` |
+| Empty call list | All rows filtered as test calls | Call with `hide_test_calls=false` |
+| Tool import errors | Running from wrong directory | Use `cwd` in Claude config pointing to repo root |
 
 ## Docker (optional)
-
-Build and run alongside the stack (stdio — attach your MCP client to the container process):
 
 ```bash
 cd mcp
@@ -112,8 +173,6 @@ docker run --rm -i \
   -e CARRIER_API_KEY=<your-api-key> \
   carrier-sales-mcp
 ```
-
-Not wired into `docker-compose.yml` by default. HTTP/SSE transport can be added later via the MCP SDK if needed.
 
 ## Smoke check
 
