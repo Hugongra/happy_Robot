@@ -22,6 +22,7 @@ Submission for the **FDE Technical Challenge: Inbound Carrier Sales**.
 - **Architecture** — [`docs/architecture.md`](docs/architecture.md)
 - **Support runbook** — [`docs/runbook.md`](docs/runbook.md)
 - **Workflow setup** — [`docs/workflow-setup.md`](docs/workflow-setup.md)
+- **MCP server (extra)** — [`mcp/`](mcp/) — exposes the API as tools for Claude / any MCP client
 - **Live demo** — links below
 
 ---
@@ -113,10 +114,18 @@ Demo data fills charts only when there are **no** live API calls.
 
 ---
 
+## MCP server (extra)
+
+Beyond the dashboard UI, the same API is exposed as an **MCP server** so Claude (Desktop, Code, or any MCP client) can query loads, KPIs, and call records in natural language. This demonstrates the API as a reusable contract: the dashboard is one consumer, Claude is another, a future Slack bot or n8n flow would be a third.
+
+Four read-only tools: `search_loads`, `get_metrics_summary`, `get_recent_calls`, `get_call_detail`. Setup and Claude Desktop config: [`mcp/README.md`](mcp/README.md).
+
+---
+
 ## Repository layout
 
 ```
-backend/   FastAPI API · frontend/   React SPA · caddy/   TLS · docs/ · deliverables/
+backend/ · frontend/ · mcp/ · caddy/ · docs/ · deliverables/
 ```
 
 Full tree, layering rules, and production evolution: [`docs/architecture.md#repository-layout`](docs/architecture.md#repository-layout).
