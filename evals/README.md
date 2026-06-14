@@ -10,6 +10,8 @@ This submission scopes that philosophy down to something reproducible for review
 
 The natural next step is replacing fixed inputs with a **Claude-driven adversarial carrier** that negotiates freely against `/api/loads/evaluate-offer` for N turns and flags any floor breach or policy violation autonomously.
 
+**This harness found and fixed one real production bug:** FMCSA upstream failures used to surface as HTTP 502; they now degrade gracefully to `eligible: false` with reason `"FMCSA unavailable"`. See commit [`9cfe97c`](https://github.com/Hugongra/Happy_Robot/commit/9cfe97c).
+
 ## What it covers
 
 | Category | Scenarios | Rules exercised |
@@ -35,7 +37,6 @@ Reference load **ACM-1001** (Dallas → Atlanta, Dry Van): posted **$2100**, int
 
 | Scenario | Behavior | Notes |
 |----------|----------|-------|
-| `fmcsa_invalid_mc` | May return **HTTP 502** for unknown MCs when FMCSA upstream errors | Demo MC `123456` bypasses upstream; real unknown MCs do not. Backend could degrade to `eligible: false` with 200 instead of 502. |
 | `lane_no_inventory` | Dallas→Phoenix **Reefer** or **Dallas** origin queries return loads via filter relaxation | Scenario uses **Fairbanks→Nome Tanker** (equipment not in seed). |
 | `webhook_idempotency` | Verified via webhook `id` + `GET /api/metrics/calls/{id}` | `recent-calls` merges HappyRobot platform runs and may omit eval-only webhook rows. |
 

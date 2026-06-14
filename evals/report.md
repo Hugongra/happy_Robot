@@ -1,23 +1,23 @@
 # Eval report
 
-**Generated:** 2026-06-14 02:18:03 UTC  
+**Generated:** 2026-06-14 02:24:57 UTC  
 **Base URL:** `https://acme-carrier-api-hugog.fly.dev`  
-**Total:** 10 · **Passed:** 9 · **Failed:** 1
+**Total:** 10 · **Passed:** 10 · **Failed:** 0
 
 ## Summary
 
 | ID | Category | Result | Latency (ms) |
 |----|----------|--------|--------------|
-| `floor_rate_rejection` | negotiation | **PASS** | 525 |
-| `three_round_cap` | negotiation | **PASS** | 2028 |
-| `acceptance_at_posted` | negotiation | **PASS** | 780 |
-| `counter_just_above_floor` | negotiation | **PASS** | 765 |
-| `counter_just_below_floor` | negotiation | **PASS** | 767 |
-| `fmcsa_invalid_mc` | verification | **FAIL** | 1228 |
-| `fmcsa_dirty_mc_format` | verification | **PASS** | 2346 |
-| `equipment_typo_tolerance` | search | **PASS** | 2311 |
-| `lane_no_inventory` | search | **PASS** | 887 |
-| `webhook_idempotency` | telemetry | **PASS** | 3127 |
+| `floor_rate_rejection` | negotiation | **PASS** | 643 |
+| `three_round_cap` | negotiation | **PASS** | 2623 |
+| `acceptance_at_posted` | negotiation | **PASS** | 883 |
+| `counter_just_above_floor` | negotiation | **PASS** | 812 |
+| `counter_just_below_floor` | negotiation | **PASS** | 826 |
+| `fmcsa_invalid_mc` | verification | **PASS** | 1268 |
+| `fmcsa_dirty_mc_format` | verification | **PASS** | 2550 |
+| `equipment_typo_tolerance` | search | **PASS** | 2510 |
+| `lane_no_inventory` | search | **PASS** | 801 |
+| `webhook_idempotency` | telemetry | **PASS** | 2550 |
 
 ## Scenarios
 
@@ -26,7 +26,7 @@
 
 ### request
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (525 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (643 ms)
 
 **Request**
 
@@ -56,7 +56,7 @@
 
 ### round 1
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (511 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (592 ms)
 
 **Request**
 
@@ -81,7 +81,7 @@
 
 ### round 2
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (548 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (654 ms)
 
 **Request**
 
@@ -106,7 +106,7 @@
 
 ### round 3
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (500 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (781 ms)
 
 **Request**
 
@@ -131,7 +131,7 @@
 
 ### round 4
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (469 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (595 ms)
 
 **Request**
 
@@ -161,7 +161,7 @@
 
 ### request
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (780 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (883 ms)
 
 **Request**
 
@@ -191,7 +191,7 @@
 
 ### request
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (765 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (812 ms)
 
 **Request**
 
@@ -221,7 +221,7 @@
 
 ### request
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (767 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/loads/evaluate-offer` -> HTTP 200 (826 ms)
 
 **Request**
 
@@ -247,11 +247,11 @@
 </details>
 
 <details>
-<summary><code>fmcsa_invalid_mc</code> — Invalid MC returns ineligible without crashing (FAIL - HTTP 502, want 200)</summary>
+<summary><code>fmcsa_invalid_mc</code> — Invalid MC returns ineligible without crashing (PASS)</summary>
 
 ### request
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 502 (1228 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 200 (1268 ms)
 
 **Request**
 
@@ -265,7 +265,13 @@
 
 ```json
 {
-  "detail": "FMCSA status 403"
+  "eligible": false,
+  "mc_number": "99999999",
+  "carrier_name": "",
+  "dot_number": "",
+  "reason": "FMCSA unavailable",
+  "allowed_to_operate": "",
+  "operating_status": ""
 }
 ```
 
@@ -276,7 +282,7 @@
 
 ### request 1
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 200 (840 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 200 (833 ms)
 
 **Request**
 
@@ -302,7 +308,7 @@
 
 ### request 2
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 200 (770 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 200 (850 ms)
 
 **Request**
 
@@ -328,7 +334,7 @@
 
 ### request 3
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 200 (735 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/fmcsa/verify` -> HTTP 200 (867 ms)
 
 **Request**
 
@@ -359,7 +365,7 @@
 
 ### request 1
 
-- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (828 ms)
+- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (842 ms)
 
 **Request**
 
@@ -441,7 +447,7 @@
 
 ### request 2
 
-- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (725 ms)
+- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (846 ms)
 
 **Request**
 
@@ -523,7 +529,7 @@
 
 ### request 3
 
-- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (757 ms)
+- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (822 ms)
 
 **Request**
 
@@ -610,7 +616,7 @@
 
 ### request
 
-- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (887 ms)
+- **GET** `https://acme-carrier-api-hugog.fly.dev/api/loads/search` -> HTTP 200 (801 ms)
 
 **Request**
 
@@ -636,13 +642,13 @@
 
 ### webhook post 1
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/webhooks/call-completed` -> HTTP 200 (995 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/webhooks/call-completed` -> HTTP 200 (888 ms)
 
 **Request**
 
 ```json
 {
-  "run_id": "eval-idempotency-9f72f85c1cb2",
+  "run_id": "eval-idempotency-956655683b65",
   "mc_number": "123456",
   "carrier_name": "Eval Harness Carrier",
   "carrier_eligible": true,
@@ -662,7 +668,7 @@
 
 ```json
 {
-  "id": 37,
+  "id": 38,
   "stored": true,
   "updated": false,
   "test": false
@@ -671,13 +677,13 @@
 
 ### webhook post 2
 
-- **POST** `https://acme-carrier-api-hugog.fly.dev/api/webhooks/call-completed` -> HTTP 200 (1077 ms)
+- **POST** `https://acme-carrier-api-hugog.fly.dev/api/webhooks/call-completed` -> HTTP 200 (817 ms)
 
 **Request**
 
 ```json
 {
-  "run_id": "eval-idempotency-9f72f85c1cb2",
+  "run_id": "eval-idempotency-956655683b65",
   "mc_number": "123456",
   "carrier_name": "Eval Harness Carrier",
   "carrier_eligible": true,
@@ -697,7 +703,7 @@
 
 ```json
 {
-  "id": 37,
+  "id": 38,
   "stored": true,
   "updated": true,
   "test": false
@@ -706,13 +712,13 @@
 
 ### verify call detail
 
-- **GET** `https://acme-carrier-api-hugog.fly.dev/api/metrics/calls/37` -> HTTP 200 (1055 ms)
+- **GET** `https://acme-carrier-api-hugog.fly.dev/api/metrics/calls/38` -> HTTP 200 (846 ms)
 
 **Request**
 
 ```json
 {
-  "call_id": 37
+  "call_id": 38
 }
 ```
 
@@ -720,9 +726,9 @@
 
 ```json
 {
-  "id": 37,
-  "run_id": "eval-idempotency-9f72f85c1cb2",
-  "created_at": "2026-06-14T02:18:07.828567Z",
+  "id": 38,
+  "run_id": "eval-idempotency-956655683b65",
+  "created_at": "2026-06-14T02:25:02.181598Z",
   "mc_number": "123456",
   "carrier_name": "Eval Harness Carrier",
   "carrier_eligible": true,
@@ -742,7 +748,7 @@
   "transcript": "Eval harness idempotency test.",
   "classification_reasoning": "",
   "raw_payload": {
-    "run_id": "eval-idempotency-9f72f85c1cb2",
+    "run_id": "eval-idempotency-956655683b65",
     "mc_number": "123456",
     "carrier_name": "Eval Harness Carrier",
     "carrier_eligible": true,
