@@ -23,6 +23,7 @@ Submission for the **FDE Technical Challenge: Inbound Carrier Sales**.
 - **Support runbook** — [`docs/runbook.md`](docs/runbook.md)
 - **Workflow setup** — [`docs/workflow-setup.md`](docs/workflow-setup.md)
 - **MCP server (extra)** — [`mcp/`](mcp/) — exposes the API as tools for Claude / any MCP client
+- **Evaluation harness (extra)** — [`evals/`](evals/) — deterministic checks for negotiation rules, FMCSA gate, normalization, and webhook idempotency
 - **Live demo** — links below
 
 ---
@@ -128,6 +129,14 @@ Beyond the dashboard UI, the same API is exposed as a **read-only MCP server** s
 **Resilience:** retries on 429/5xx, metrics cache, rate limit **120 req/min** (configurable via `MCP_RATE_LIMIT_PER_MIN`). Write tools are not implemented — read-only by design.
 
 **Claude Desktop (2 min):** `pip install -r mcp/requirements.txt`, set `CARRIER_API_KEY` in `mcp/.env`, add server with `"args": ["-m", "mcp.server"]` and `"cwd": "<repo root>"`. Full config and demo prompts: [`mcp/README.md`](mcp/README.md).
+
+---
+
+## Evaluation harness (extra)
+
+Inspired by HappyRobot's adversarial-agent testing approach, the repo ships a deterministic eval harness covering the 10 most load-bearing rules: floor rate, 3-round cap, FMCSA gate, MC and equipment normalization, lane-without-inventory handling, and webhook idempotency. One command, one markdown report.
+
+Setup, scenarios, and the natural evolution toward Claude-driven adversarial carriers: [`evals/README.md`](evals/README.md).
 
 ---
 

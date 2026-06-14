@@ -1,0 +1,205 @@
+# Reference load from backend/app/db/seed_loads.json (floor not exposed by API).
+reference_load:
+  load_id: ACM-1001
+  origin: Dallas, TX
+  destination: Atlanta, GA
+  equipment_type: Dry Van
+  loadboard_rate: 2100
+  min_acceptable_rate: 1950
+
+scenarios:
+  - id: floor_rate_rejection
+    name: Offer well below floor is rejected or countered above offer
+    category: negotiation
+    description: >
+      POST /api/loads/evaluate-offer with carrier_offer = loadboard_rate * 0.5
+      on ACM-1001 (posted $2100, internal floor $1950).
+    request:
+      method: POST
+      path: /api/loads/evaluate-offer
+      body:
+        load_id: ACM-1001
+        carrier_offer: 1050
+        round_number: 1
+    expected:
+      decision_not: accept
+      if_counter_broker_counter_gt_offer: true
+
+  - id: three_round_cap
+    name: Fourth negotiation round cannot keep countering indefinitely
+    category: negotiation
+    description: >
+      Four sequential evaluate-offer calls with round_number 1–4, same load,
+      offers below posted rate ($1500 on ACM-1001).
+    request:
+      type: multi_round
+      path: /api/loads/evaluate-offer
+      body_template:
+        load_id: ACM-1001
+        carrier_offer: 1500
+      rounds: [1, 2, 3, 4]
+    expected:
+      rounds_1_to_3_decision_in: [counter, accept]
+      round_4_decision: reject
+      round_4_rationale_contains: "3 rounds"
+
+  - id: acceptance_at_posted
+    name: Offer at posted rate is accepted immediately
+    category: negotiation
+    description: evaluate-offer with carrier_offer == loadboard_rate, round 1.
+    request:
+      method: POST
+      path: /api/loads/evaluate-offer
+      body:
+        load_id: ACM-1001
+        carrier_offer: 2100
+        round_number: 1
+    expected:
+      decision: accept
+
+  - id: counter_just_above_floor
+    name: Offer above internal floor in late round is accepted or fairly countered
+    category: negotiation
+    description: >
+      Uses carrier_offer $1960 (above known floor $1950) at round 2.
+      Assumption documented in README — API echoes floor_rate in response.
+    request:
+      method: POST
+      path: /api/loads/evaluate-offer
+      body:
+        load_id: ACM-1001
+        carrier_offer: 1960
+        round_number: 2
+    expected:
+      decision_in: [accept, counter]
+      if_counter_within_of_offer: 200
+
+  - id: counter_just_below_floor
+    name: Offer below floor must not be accepted at round 1
+    category: negotiation
+    description: carrier_offer = loadboard_rate * 0.7 ($1470), below floor $1950.
+    request:
+      method: POST
+      path: /api/loads/evaluate-offer
+      body:
+        load_id: ACM-1001
+        carrier_offer: 1470
+        round_number: 1
+    expected:
+      decision_not: accept
+
+  - id: fmcsa_invalid_mc
+    name: Invalid MC returns ineligible without crashing
+    category: verification
+    description: POST /api/fmcsa/verify with MC 99999999 (not in demo seed).
+    request:
+      method: POST
+      path: /api/fmcsa/verify
+      body:
+        mc_number: "99999999"
+    expected:
+      eligible: false
+      reason_non_empty: true
+      http_status: 200
+
+  - id: fmcsa_dirty_mc_format
+    name: MC format variants normalize to the same demo carrier
+    category: verification
+    description: Three MC strings that should all resolve to demo carrier 123456.
+    request:
+      type: multi_request
+      requests:
+        - method: POST
+          path: /api/fmcsa/verify
+          body: { mc_number: "MC-123456" }
+        - method: POST
+          path: /api/fmcsa/verify
+          body: { mc_number: "mc 123456" }
+        - method: POST
+          path: /api/fmcsa/verify
+          body: { mc_number: "123456" }
+    expected:
+      all_eligible: true
+      same_carrier_name: true
+      carrier_name: Acme Trucking LLC
+
+  - id: equipment_typo_tolerance
+    name: Equipment typos still return loads for Dallas → Atlanta
+    category: search
+    description: >
+      GET /api/loads/search with equipment_type variants for known lane.
+    request:
+      type: multi_request
+      requests:
+        - method: GET
+          path: /api/loads/search
+          params:
+            origin: Dallas
+            destination: Atlanta
+            equipment_type: drive van
+            limit: 5
+        - method: GET
+          path: /api/loads/search
+          params:
+            origin: Dallas
+            destination: Atlanta
+            equipment_type: dry-van
+            limit: 5
+        - method: GET
+          path: /api/loads/search
+          params:
+            origin: Dallas
+            destination: Atlanta
+            equipment_type: DRY VAN
+            limit: 5
+    expected:
+      all_min_count: 1
+
+  - id: lane_no_inventory
+    name: Empty lane returns 200 with no rows
+    category: search
+    description: >
+      Fairbanks to Nome with Tanker — no matching seed loads even when
+      search relaxes filters (unlike Reefer-only which still returns rows).
+    request:
+      method: GET
+      path: /api/loads/search
+      params:
+        origin: Fairbanks
+        destination: Nome
+        equipment_type: Tanker
+        limit: 5
+    expected:
+      http_status: 200
+      max_count: 0
+
+  - id: webhook_idempotency
+    name: Duplicate webhook run_id upserts a single call row
+    category: telemetry
+    description: >
+      POST /api/webhooks/call-completed twice with the same run_id.
+      Verified via webhook response ids (recent-calls merges platform
+      runs and may omit eval-only rows when HappyRobot is configured).
+    request:
+      type: webhook_idempotency
+      path: /api/webhooks/call-completed
+      verify_path: /api/metrics/calls
+      body:
+        run_id: eval-idempotency-placeholder
+        mc_number: "123456"
+        carrier_name: Eval Harness Carrier
+        carrier_eligible: true
+        load_id: ACM-1001
+        loadboard_rate: 2100
+        agreed_rate: 2000
+        origin: Dallas, TX
+        destination: Atlanta, GA
+        equipment_type: Dry Van
+        outcome: load_booked
+        sentiment: positive
+        transcript: "Eval harness idempotency test."
+    expected:
+      duplicate_posts: 2
+      first_updated: false
+      second_updated: true
+      same_call_id: true
