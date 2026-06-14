@@ -59,6 +59,16 @@ def _demo_verify(mc: str) -> VerifyOut | None:
     )
 
 
+def _fmcsa_unavailable(mc: str) -> VerifyOut:
+    """Graceful degradation when FMCSA upstream errors or times out."""
+    return VerifyOut(
+        eligible=False,
+        mc_number=mc,
+        carrier_name="",
+        reason="FMCSA unavailable",
+    )
+
+
 @router.post("/fmcsa/verify", response_model=VerifyOut)
 async def verify_carrier(payload: VerifyIn) -> VerifyOut:
     mc = _normalize_mc(payload.mc_number)
@@ -82,7 +92,7 @@ async def verify_carrier(payload: VerifyIn) -> VerifyOut:
     except httpx.HTTPError:
         if demo := _demo_verify(mc):
             return demo
-        raise HTTPException(status_code=502, detail="FMCSA upstream error")
+        return _fmcsa_unavailable(mc)
 
     if r.status_code == 404:
         if demo := _demo_verify(mc):
@@ -91,14 +101,14 @@ async def verify_carrier(payload: VerifyIn) -> VerifyOut:
     if r.status_code != 200:
         if demo := _demo_verify(mc):
             return demo
-        raise HTTPException(status_code=502, detail=f"FMCSA status {r.status_code}")
+        return _fmcsa_unavailable(mc)
 
     try:
         data = r.json()
     except ValueError:
         if demo := _demo_verify(mc):
             return demo
-        raise HTTPException(status_code=502, detail="FMCSA returned invalid JSON")
+        return _fmcsa_unavailable(mc)
 
     # FMCSA returns { "content": [ { "carrier": {...} } ] }
     content = data.get("content")
